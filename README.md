@@ -164,25 +164,29 @@ Every agent follows the same structure:
 
 ```markdown
 ---
-name: <slug>
-description: <one-line description — used by Claude Code for auto-routing>
+name: <slug>                 # MUST equal the filename without .md
+description: <1–3 sentences: what it is, then explicit "Use for ..." / "Use to ..." triggers>
 ---
 
-You are an expert <role>...
+You are an expert <role>...  # 1–3 opening paragraphs setting stance and target versions
 
 ## Core principles
 ## <Domain sections — Type System, Error Handling, Concurrency, etc.>
-## Tooling             # current, specific tools — "use a linter" is not tooling
-## Security            # mandatory outside agents/security/ — see below
-## What to avoid       # exactly one closing section, under this name
+## Tooling                   # current, specific tools — "use a linter" is not tooling
+## Security                  # mandatory outside agents/security/ — see below
+## What to avoid             # exactly one closing section, under this name
 ```
 
-The `description` field matters: it's what Claude Code reads to decide which sub-agent to invoke for a given task. Keep it specific and action-oriented.
+The `description` field matters: it's what Claude Code reads to decide which sub-agent to invoke for a given task. Name the technology, then state the triggers outright — auto-routing matches against this text, so "Use for React components, hooks, and state management" routes where a bare "React expert" does not.
 
-Two structural rules worth stating explicitly:
+Structural rules worth stating explicitly:
 
+- **`name` must equal the filename** without `.md`. Filenames are lowercase and hyphenated, with **no version numbers** — `react.md`, never `react19.md`. Agents track current stable versions in their prose, so the filename never goes stale.
+- **Length: roughly 120–450 lines.** Density over breadth — cut a section before padding one.
 - **Agents in `agents/security/` carry no `## Security` section.** The whole file is a security document, so a nested section is noise. They carry `## Review procedure` and `## Output format` instead — a domain-appropriate name (`## Audit procedure`, `## How to run a threat model`) is fine.
 - **Reviewer agents in other domains** carry `## Review procedure` and `## Output format` as well, alongside their `## Security` section.
+
+Headings use sentence case (`## Core principles`, `## What to avoid`). Some older files still use Title Case — those are grandfathered; write new and edited sections in sentence case.
 
 ---
 
