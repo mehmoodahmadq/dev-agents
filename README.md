@@ -170,14 +170,19 @@ description: <one-line description — used by Claude Code for auto-routing>
 
 You are an expert <role>...
 
-## Core Principles
+## Core principles
 ## <Domain sections — Type System, Error Handling, Concurrency, etc.>
-## Security
-## Tooling
-## What to Avoid
+## Tooling             # current, specific tools — "use a linter" is not tooling
+## Security            # mandatory outside agents/security/ — see below
+## What to avoid       # exactly one closing section, under this name
 ```
 
 The `description` field matters: it's what Claude Code reads to decide which sub-agent to invoke for a given task. Keep it specific and action-oriented.
+
+Two structural rules worth stating explicitly:
+
+- **Agents in `agents/security/` carry no `## Security` section.** The whole file is a security document, so a nested section is noise. They carry `## Review procedure` and `## Output format` instead — a domain-appropriate name (`## Audit procedure`, `## How to run a threat model`) is fine.
+- **Reviewer agents in other domains** carry `## Review procedure` and `## Output format` as well, alongside their `## Security` section.
 
 ---
 
@@ -189,7 +194,7 @@ Every agent in this repo must be:
 - **Actionable** — code examples, not vague prose.
 - **Current** — reflects the ecosystem *today*, not five years ago.
 - **Self-contained** — usable without reading any other file.
-- **Security-aware** — a dedicated Security section is mandatory, not optional.
+- **Security-aware** — a dedicated `## Security` section is mandatory outside `agents/security/`, where the entire agent already is one.
 - **Honest about trade-offs** — explains *why* a decision was made.
 
 If a PR adds an agent that doesn't meet all six, it doesn't merge.
