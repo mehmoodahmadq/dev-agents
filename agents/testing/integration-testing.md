@@ -272,6 +272,56 @@ The payment gateway is the right boundary to fake — you don't own it, you can'
 10. Is the seed data **per-test factory** rather than a global blob?
 11. Does the test fail for **one** reason, with a name that says what behavior it covers?
 
+## Tooling
+
+- **Infrastructure**: Testcontainers, in the language's own binding. Docker Compose only for a dev environment a human uses, never as test fixture — it has no lifecycle tied to the test run.
+- **Runner**: the same runner as your unit tests, in a separate project/config with a longer timeout (30s+) and reduced parallelism. `vitest --project integration`, `pytest -m integration`.
+- **HTTP**: Supertest (Node), `httpx.AsyncClient` (Python), `MockMvc`/`WebTestClient` (Spring). Drive the app through its real router — not by calling handler functions directly, which skips the middleware you most need to test.
+- **Contract testing**: Pact for consumer-driven contracts across team boundaries; Schemathesis or Dredd to fuzz an OpenAPI spec against the running service.
+- **Migrations**: the project's real migration tool (Flyway, Alembic, Prisma Migrate, golang-migrate) run against the container at startup. Never a hand-maintained `schema.sql` for tests — it drifts.
+- **Fakes for third parties**: WireMock, MSW (Node), `respx` (Python), or the vendor's own emulator (LocalStack, Firebase emulator, Stripe CLI). Never the vendor's live sandbox — it's a shared, rate-limited, flaky dependency.
+- **CI**: a Docker-capable runner with a warm image cache. Pull images by digest in a setup step so the pull isn't inside the test timeout.
+
+## Security
+
+Integration tests hold real credentials to real services. That makes them both the best place to test security controls end to end, and the most common source of leaked secrets in a repo.
+
+- **Container credentials are throwaway and inline.** `POSTGRES_PASSWORD: "test"` in the Testcontainers config is correct — the container is ephemeral and bound to a random port. Pulling those from a shared `.env` is what goes wrong, because that file eventually holds a real one.
+- **Never let a test suite reach production.** Assert it at startup, not in a code-review checklist: refuse to run if the resolved host isn't a container or localhost. A single bad `DATABASE_URL` in CI has truncated production tables at more than one company.
+- **Test authorization across the real boundary.** Unit tests prove the policy function works; integration tests prove the route actually *calls* it. Hit the endpoint as a non-owner and assert 403 — this is the layer where a missing middleware registration shows up.
+- **Assert on tenant isolation explicitly.** Seed two tenants, query as one, assert rows from the other never appear. Multi-tenant leaks are invisible in single-tenant fixtures.
+- **Never seed real user data.** Production dumps carry real PII, and a test database is backed up, shared, and rarely encrypted. Generate synthetic data.
+- **Scrub credentials from failure output.** Integration failures dump connection strings and request headers into CI logs, which are readable by everyone with repo access and retained for months.
+- **Pin images by digest, not tag.** `postgres:16` is mutable; `postgres@sha256:...` is not. A tag repoint is an unreviewed dependency upgrade in the middle of your test suite.
+
+```ts
+import { beforeAll, expect, it } from "vitest";
+
+// A guard that makes "oops, it pointed at prod" impossible rather than unlikely.
+beforeAll(() => {
+  const url = new URL(process.env.DATABASE_URL!);
+  const local = ["localhost", "127.0.0.1", "::1", "host.docker.internal"];
+  if (!local.includes(url.hostname)) {
+    throw new Error(`Refusing to run integration tests against ${url.hostname}`);
+  }
+});
+
+it("does not leak rows across tenants", async () => {
+  await seed({ tenant: "acme", docs: ["a1"] });
+  await seed({ tenant: "globex", docs: ["g1"] });
+
+  const res = await api.get("/documents", { headers: authFor("acme") });
+
+  expect(res.body.map((d) => d.id)).toEqual(["a1"]);
+});
+
+it("rejects a non-owner editing a document", async () => {
+  const doc = await seed({ tenant: "acme", ownerId: "u1" });
+  const res = await api.patch(`/documents/${doc.id}`, { headers: authFor("acme", "u2") });
+  expect(res.status).toBe(403);
+});
+```
+
 ## What to avoid
 
 - Pointing tests at a long-lived shared environment. It is not integration testing; it is integration roulette.

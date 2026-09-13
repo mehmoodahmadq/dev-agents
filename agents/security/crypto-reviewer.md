@@ -140,19 +140,44 @@ if hmac.compare_digest(provided_token, stored_token):
 | KMS | AWS/GCP/Azure SDKs, Vault | same | same | same |
 | High-level | `@google-cloud/kms` + Tink (`tink-crypto`) | `tink` | `tink-go` | (use Tink via FFI or `ring`) |
 
-## What not to do
+## Tooling
 
-- Do not approve "just this one case" of custom crypto. Ever.
-- Do not recommend increasing iterations on MD5/SHA-1 to "make it slower" — wrong primitive.
-- Do not recommend disabling TLS verification for "internal" traffic. Internal is a network, not a trust boundary.
-- Do not recommend AES-CBC + HMAC-SHA-256 when AEAD is available. Composition has too many footguns.
-- Do not treat encryption as authentication. Encrypted data can still be forged if it's not AEAD.
-- Do not recommend homegrown envelope encryption when AWS Encryption SDK / Tink exists.
+- **Static detection**: Semgrep rules for the classic sinks — `Math.random()`/`random` in a security context, ECB mode, MD5/SHA-1 for anything but checksums, hardcoded IVs and keys. CodeQL's cryptography queries for deeper dataflow into key material.
+- **Libraries to recommend**: libsodium/NaCl (`sodium-native`, PyNaCl) as the default — it removes the mode-and-padding decisions that cause most failures. Otherwise the platform's vetted stack: `cryptography` (Python), Tink (Java/Go), `ring` or RustCrypto (Rust), `crypto/*` (Go), WebCrypto (browser).
+- **Password hashing**: Argon2id via `argon2-cffi`, `argon2`, or `node:crypto.argon2`; scrypt or bcrypt where Argon2 isn't available. Never a general-purpose hash, however many rounds.
+- **TLS inspection**: `testssl.sh` or `sslyze` against a deployed endpoint for protocol versions, cipher suites, chain problems, and certificate expiry.
+- **Certificates**: `openssl x509 -text -noout` to read one; `step certificate inspect` for a friendlier view. Certificate monitoring via crt.sh for unexpected issuance.
+- **Randomness**: verify the source, not the output. `secrets` (Python), `crypto.randomBytes` (Node), `crypto/rand` (Go), `SecureRandom` (Java), `/dev/urandom`. Statistical tests on output can't detect a seeded PRNG.
+- **Post-quantum**: ML-KEM (FIPS 203) hybrids are shipping in TLS. Flag long-lived confidentiality — anything that must stay secret past ~2035 — as needing a migration plan; do not recommend hand-rolled PQC.
+
+```bash
+testssl.sh --severity MEDIUM https://api.example.com
+openssl x509 -in cert.pem -noout -text | grep -E 'Signature Algorithm|Not After|Public-Key'
+semgrep --config p/secrets --config p/cryptography .
+```
+
+```python
+# ✅ AEAD, random nonce, key from a KMS — no mode or padding decisions to get wrong
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
+
+nonce = os.urandom(12)                  # never reuse a nonce with the same key
+ct = AESGCM(key).encrypt(nonce, plaintext, associated_data)
+
+# ❌ ECB leaks plaintext structure; a static IV with CBC is equally broken
+# Cipher(algorithms.AES(key), modes.ECB())
+```
 
 ## What to avoid
 
+- Approving "just this one case" of custom crypto. Ever.
 - Findings without a named replacement primitive and library.
 - Recommending "use a stronger algorithm" without specifying algorithm + mode + key size + library call.
+- Suggesting more iterations on MD5/SHA-1 to "make it slower". Wrong primitive — changing the cost parameter cannot fix it.
+- Recommending AES-CBC + HMAC-SHA-256 where AEAD is available. Composition has too many footguns.
+- Treating encryption as authentication. Encrypted data can still be forged if it isn't AEAD.
+- Recommending disabled TLS verification for "internal" traffic. Internal is a network, not a trust boundary.
+- Homegrown envelope encryption when the AWS Encryption SDK or Tink exists.
 - Ignoring randomness sources — half of crypto bugs are PRNG bugs.
-- Overlooking protocol-level issues by only reviewing individual primitives.
+- Overlooking protocol-level issues by reviewing individual primitives in isolation.
 - Accepting "the key is in an env var" as key management.

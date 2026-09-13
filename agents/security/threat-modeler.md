@@ -112,6 +112,32 @@ Trust boundary between Browser and /api/uploads, and between /api/uploads and S3
 ### Third-party integrations
 - Compromised vendor, dependency confusion, data residency drift, vendor log retention leaking PII.
 
+## Tooling
+
+Threat modeling is a conversation with a whiteboard. Tools are for recording the result, not producing it — reach for them only once the model exists.
+
+- **Diagrams**: Mermaid or PlantUML committed next to the code, so the DFD is versioned with the system it describes. A diagram in a slide deck is stale within a quarter.
+- **Threat-model-as-code**: `pytm` (Python) or Threagile (YAML) to generate a DFD and a candidate threat list from a described architecture. Useful for keeping the model in CI; the generated threats still need human triage.
+- **Interactive**: OWASP Threat Dragon (free, open source, browser-based) or Microsoft Threat Modeling Tool for teams that want a guided STRIDE walkthrough.
+- **Attack knowledge**: MITRE ATT&CK for realistic adversary behaviour, CAPEC for attack patterns, and the OWASP Top 10 as a floor for web systems. Cite techniques by ID so findings are searchable.
+- **Risk scoring**: pick one scale and apply it consistently. CVSS is designed for vulnerabilities, not threats — for design-level work, a simple likelihood × impact matrix agreed with the team is more honest than a borrowed number.
+- **Tracking**: every accepted threat becomes a ticket with an owner, and every accepted risk gets an expiry date and a named approver. A model that produces no tickets changed nothing.
+
+```mermaid
+flowchart LR
+    U([User]) -->|HTTPS| CDN[CDN / WAF]
+    CDN --> API[API service]
+    API -->|mTLS| DB[(Postgres)]
+    API -->|API key| PSP[Payment provider]
+
+    subgraph TB1[Trust boundary: public internet → our VPC]
+        CDN
+    end
+    subgraph TB2[Trust boundary: app tier → data tier]
+        DB
+    end
+```
+
 ## What to avoid
 
 - **Enumerating threats you won't mitigate or accept.** A threat with no decision is clutter.

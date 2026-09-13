@@ -307,6 +307,43 @@ A `setup()` helper per file keeps tests focused on the behavior, not the wiring.
 9. Is `cleanup` running between tests, no shared rendered DOM?
 10. Are tests fast — single test < 200ms? If not, what's slow and why?
 
+## Security
+
+Component tests are the cheapest place to catch XSS and leaked-credential bugs, because the rendered DOM is right there to assert on.
+
+- **Assert on escaping, at the DOM level.** Render user-controlled content and check `textContent`, not `innerHTML`. If the component uses `dangerouslySetInnerHTML` / `v-html` / `{@html}`, there must be a test feeding it `<img src=x onerror=...>` and asserting the handler never fires.
+- **MSW handlers hold fake tokens only.** Handlers get committed. `"Bearer test-token"` — never a captured real one from your browser devtools.
+- **Test that secrets stay out of the DOM.** If a component receives a session token or API key as a prop, assert it never lands in an attribute, a `data-*`, or the accessible name.
+- **`onUnhandledRequest: "error"` is a security control, not just hygiene.** It's what tells you a component is quietly calling a third-party endpoint you didn't intend to ship.
+- **Never point a component test at a real backend.** A misconfigured `baseURL` that reaches staging will happily create records with test data — and sometimes production.
+- **Assert the auth-gated render path.** A component that hides admin controls behind a role check needs a test rendering it as a non-admin and asserting the control is *absent from the DOM* — not merely `display: none`, which is client-side theatre a user can undo.
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
+import { Comment } from "./Comment";
+import { Toolbar } from "./Toolbar";
+
+it("renders user content as text, never as markup", () => {
+  const onError = vi.fn();
+  window.addEventListener("error", onError);
+
+  render(<Comment body={'<img src=x onerror="window.__pwned = true">'} />);
+
+  // The payload is visible as literal text and never executed.
+  expect(screen.getByText(/<img src=x/)).toBeInTheDocument();
+  expect(document.querySelector("img")).toBeNull();
+  expect((window as any).__pwned).toBeUndefined();
+  expect(onError).not.toHaveBeenCalled();
+});
+
+it("does not render admin actions for a viewer", () => {
+  render(<Toolbar role="viewer" />);
+  // queryBy → absent from the DOM entirely, not just hidden.
+  expect(screen.queryByRole("button", { name: /delete workspace/i })).toBeNull();
+});
+```
+
 ## What to avoid
 
 - Mocking the framework. If you find yourself mocking `useState`, stop.

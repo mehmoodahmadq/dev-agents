@@ -114,6 +114,31 @@ from {{ source('bronze', 'orders') }}
 - **Quarantine, don't drop.** Bad records go to a dead-letter table with the failure reason. Engineers triage, source owners fix.
 - **Recon checks** between source and warehouse: daily count and sum reconciliation. Diverge = page someone.
 
+```yaml
+# dbt: the contract is enforced, not documented. A schema change that breaks a
+# downstream consumer fails at build time instead of at 3am in a dashboard.
+models:
+  - name: fct_orders
+    config:
+      contract: { enforced: true }
+    columns:
+      - name: order_id
+        data_type: varchar
+        constraints: [{ type: not_null }, { type: primary_key }]
+        tests: [unique, not_null]
+      - name: total_amount
+        data_type: numeric(12,2)
+        tests:
+          - dbt_utils.accepted_range: { min_value: 0, inclusive: true }
+      - name: status
+        data_type: varchar
+        tests:
+          - accepted_values: { values: ["pending", "paid", "refunded", "cancelled"] }
+    tests:
+      # Freshness and volume drift — the two that catch a silently broken source.
+      - dbt_utils.recency: { datepart: hour, field: created_at, interval: 6 }
+```
+
 ## Backfills and reprocessing
 
 - **Backfills run the same code as live.** No separate "backfill mode" — that path rots and lies.
@@ -134,6 +159,16 @@ Logs:
 - Structured (JSON), with `run_id`, `asset`, `partition`, `attempt`.
 - Never log row contents at INFO level for PII-bearing pipelines.
 - Persist orchestrator logs for ≥30 days; retain failure-context dumps longer.
+
+## Tooling
+
+- **Orchestration**: Dagster (asset-oriented, typed, strong local development) or Airflow 3 where the team already runs it. Prefect for lighter Python-native scheduling. Pick assets over tasks — lineage comes for free.
+- **Transformation**: dbt for SQL-in-warehouse, with tests and contracts on every model. Don't hand-roll a templating layer.
+- **Ingestion**: Airbyte or Fivetran for commodity connectors; a hand-written extractor only when the source is genuinely unusual. Writing your own Salesforce connector is not where your value is.
+- **Storage/table format**: Iceberg or Delta Lake for anything at scale — ACID commits, time travel, and schema evolution are what make backfills survivable.
+- **Processing**: DuckDB or Polars for single-node work (which covers far more than people assume), Spark only when data genuinely exceeds one machine.
+- **Data quality**: dbt tests for the basics; Great Expectations or Soda for richer suites. Fail the pipeline on violation — a quality check that only warns is a dashboard nobody reads.
+- **Streaming**: Kafka with Schema Registry, or the cloud-native equivalent. Flink when you need real stateful stream processing rather than a consumer loop.
 
 ## Security
 

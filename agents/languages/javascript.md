@@ -90,6 +90,17 @@ try {
 - Validate environment variables at startup — fail fast with a clear message if required vars are missing.
 - Use `process.exitCode = 1` over `process.exit(1)` to allow cleanup handlers to run.
 
+## Tooling
+
+- **Formatter/linter**: Biome for both in one pass (fast, single config), or ESLint flat config + Prettier on an existing setup. Don't run both linters.
+- **Type checking without TypeScript**: JSDoc annotations plus `// @ts-check` and `tsc --noEmit --allowJs`. You get most of the safety with no build step — and if you're starting fresh, use TypeScript.
+- **Testing**: Vitest. Node's built-in `node:test` for dependency-free libraries.
+- **Package manager**: npm (ubiquitous), pnpm (fast, strict, disk-efficient). Commit the lockfile; `npm ci` in CI, never `npm install`.
+- **Bundling**: Vite for apps, tsdown/rolldown for libraries. esbuild directly when you need raw speed and no plugin ecosystem.
+- **Runtime**: Node 22 LTS+. Use built-ins before dependencies — `fetch`, `node:test`, `structuredClone`, `AbortController`, `Object.groupBy` are all native now.
+- **Modules**: ESM only in new code (`"type": "module"`). CommonJS interop is the source of most build pain.
+- **Supply chain**: `npm audit --omit=dev` plus Dependabot/Renovate, and `--ignore-scripts` when installing anything you haven't reviewed — install hooks execute arbitrary code.
+
 ## Security
 
 JavaScript runs in the browser *and* on servers — both surfaces are hostile. Treat every external input as attacker-controlled.

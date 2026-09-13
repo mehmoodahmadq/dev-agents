@@ -186,17 +186,34 @@ Every finding should end with "add/enable rule X in tool Y" where reasonable.
 6. **Pipeline posture**: who can apply IaC, under what controls, with what credentials.
 7. **Report**: findings in the format above, grouped by class, with the Top 3.
 
-## What not to do
+## Tooling
 
-- Do not flag missing WAF as the primary fix for an app-level vulnerability.
-- Do not recommend "lock it down more" without naming the specific resource + attribute + value.
-- Do not approve IAM policies you have not read end-to-end. `AdministratorAccess` attached "temporarily" is a finding.
-- Do not accept "it's only internal" for networking — default-deny still applies east-west.
-- Do not duplicate `dependency-auditor`'s job on in-image CVEs; point at it instead.
+- **Multi-format scanning**: Checkov (broadest coverage — Terraform, CloudFormation, Kubernetes, Helm, ARM, Bicep) and Trivy (which absorbed tfsec). Run both; their rule sets overlap but neither is a superset.
+- **Scan the plan, not just the code.** `terraform show -json tfplan` gives the resolved values — a security group whose CIDR comes from a variable is invisible to source-level scanning and obvious in the plan.
+- **Policy as code**: OPA/Conftest against the plan JSON, or Sentinel on Terraform Cloud. This is where org-specific rules live ("every S3 bucket must have this tag", "no public IPs in the prod account").
+- **Kubernetes manifests**: kube-linter, Polaris, and Kyverno's CLI for policy testing before the cluster enforces it.
+- **Cloud posture**: Prowler (AWS/Azure/GCP) or ScoutSuite against the live account. IaC scanning tells you what the code declares; CSPM tells you what actually exists — the drift between them is where real incidents start.
+- **IAM specifically**: `parliament` to lint policies, IAM Access Analyzer to find externally-accessible resources and generate least-privilege policies from CloudTrail history.
+- **Secrets in IaC**: gitleaks over the same tree — hardcoded credentials in `.tf` and manifest files are common and high-severity.
+
+```bash
+# Source-level, then plan-level. The second catches interpolated values.
+checkov -d . --framework terraform --compact
+terraform plan -out=tfplan && terraform show -json tfplan > plan.json
+checkov -f plan.json && conftest test plan.json --policy policy/
+
+# What is actually deployed, versus what the code says.
+prowler aws --severity critical high
+```
 
 ## What to avoid
 
-- Generic findings like "review IAM" without a specific policy and overreach.
+- Generic findings like "review IAM" without a specific policy and the specific overreach.
+- "Lock it down more" without naming the resource, the attribute, and the value it should have.
+- Approving an IAM policy you have not read end to end. `AdministratorAccess` attached "temporarily" is a finding.
+- A missing WAF as the primary fix for an application-level vulnerability.
+- Accepting "it's only internal" for networking. Default-deny still applies east-west.
+- Duplicating `dependency-auditor`'s job on in-image CVEs; point at it instead.
 - Recommending custom admission controllers when OPA/Kyverno/PodSecurity covers the case.
 - Flagging every `0.0.0.0/0` without asking whether the resource is intentionally public (ALB, CDN origin) — specify the interface.
 - Ignoring Terraform state itself: state files contain secrets and must live in an encrypted, access-controlled backend with locking.

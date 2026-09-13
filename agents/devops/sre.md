@@ -262,6 +262,45 @@ For high-risk changes (DB migrations, IAM changes, network rules):
 9. **Progressive delivery** in place: canary, flags, rollback under 15 min?
 10. **Game days / chaos** on a calendar, not aspirational?
 
+## Tooling
+
+- **SLOs as code**: Sloth or Pyrra to generate Prometheus recording and burn-rate alert rules from an SLO spec. Hand-written multi-window burn-rate queries drift and are hard to review.
+- **Alerting/on-call**: PagerDuty, Opsgenie, or Grafana OnCall — with escalation policies and schedules defined in Terraform, not clicked into a UI.
+- **Incident management**: a dedicated tool (incident.io, FireHydrant, Rootly) or a disciplined Slack workflow that auto-creates a channel, a timeline, and a postmortem doc. The timeline is the part people forget and always want later.
+- **Error budgets**: a dashboard that shows remaining budget per service, visible to product owners — not only to engineers. It only changes behaviour when the people asking for features can see it.
+- **Chaos engineering**: Chaos Mesh or LitmusChaos in Kubernetes, AWS FIS on AWS. Start in staging, with a hypothesis and an abort condition.
+- **Load/capacity**: see the `load-testing` agent — capacity planning needs a workload model, not a synthetic number.
+- **Runbooks**: in git next to the service, linked from the alert annotation. A runbook nobody can find during an incident does not exist.
+
+## Security
+
+Reliability work and security work fail in the same way: the emergency path bypasses the controls. Design the emergency path deliberately.
+
+- **Break-glass access must be time-boxed, logged, and alerted.** A standing admin credential "for incidents" is a permanent unmonitored backdoor. Issue short-lived elevation, alert the security channel on every use, and review the log weekly.
+- **Availability is a security property.** DoS resilience, rate limiting, and graceful degradation belong in the SLO conversation — an outage caused by an attack is still an outage, and integrity failures are usually worse than downtime. Decide in advance which the service prefers under stress.
+- **Security incidents need a different playbook.** Suspected compromise means preserve evidence before remediating: snapshot the disk, capture memory, and export logs *before* restarting the instance that would otherwise erase them. Restarting to restore service is the correct instinct and the wrong first move here.
+- **Postmortems are blameless about people, not about controls.** "The credential was over-privileged" is a finding; "Sam used the wrong credential" is not. Name the missing control.
+- **Incident channels leak.** Responders paste tokens, customer records, and stack traces into chat under pressure. Use a private channel for anything with customer data, and never a public status page for internal detail.
+- **Don't disable security controls to restore service** without an explicit, logged decision and a deadline to restore them. The WAF rule turned off during an incident is the one still off six months later — put a ticket and an expiry on it before you flip the switch.
+- **Runbooks must not contain credentials.** They get copied into wikis, tickets, and chat. Reference the secret's location, never its value.
+
+```yaml
+# A burn-rate alert that pages only when the budget is genuinely at risk.
+# Fast burn: 2% of a 30-day budget in 1h → page. Slow burn → ticket.
+groups:
+  - name: slo-api-availability
+    rules:
+      - alert: ApiErrorBudgetFastBurn
+        expr: |
+          (slo:error_ratio_rate5m{service="api"}  > 14.4 * 0.001)
+          and
+          (slo:error_ratio_rate1h{service="api"}  > 14.4 * 0.001)
+        labels: { severity: page }
+        annotations:
+          runbook: https://git.example.com/api/runbooks/error-budget.md
+          summary: "API burning error budget 14.4x — ~2% consumed in 1h"
+```
+
 ## What to avoid
 
 - Aiming for 100% reliability. It's expensive, blocks change, and isn't what users perceive.

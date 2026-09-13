@@ -314,6 +314,57 @@ Cost allocation, ownership lookup, and oncall paging all depend on tags. They ar
 8. **CI** — fmt + validate + tflint + security scan + plan-on-PR + apply-with-approval?
 9. **Drift** — periodic detection job in place?
 
+## Tooling
+
+- **Version pinning**: `required_version` and `required_providers` with `~>` constraints, plus a committed `.terraform.lock.hcl`. An unpinned provider upgrade can rewrite your plan overnight.
+- **Formatting/validation**: `terraform fmt -check` and `terraform validate` in CI; TFLint for provider-specific lint the validator misses.
+- **Static security analysis**: Checkov, tfsec (now folded into Trivy), or Terrascan on every plan. Wire them to fail the build, not to produce a report nobody reads.
+- **Policy as code**: OPA/Conftest against the JSON plan, or Sentinel on Terraform Cloud. Policy on the *plan* catches what policy on the *code* cannot.
+- **Cost**: Infracost as a PR comment. It turns "this is a small change" into a number before merge.
+- **Docs**: `terraform-docs` to generate module input/output tables from source — hand-written ones go stale immediately.
+- **Automation**: Atlantis or Terraform Cloud/Spacelift for plan-on-PR and gated apply. `cdktf` only if your team genuinely needs a general-purpose language; HCL's constraints are mostly load-bearing.
+
+## Security
+
+Terraform holds credentials to everything and writes them to disk in plaintext. State is the crown jewel.
+
+- **State contains secrets in cleartext.** RDS passwords, private keys, generated tokens — all of it, regardless of whether the resource marks them sensitive. Remote backend only, with encryption at rest, bucket versioning, TLS enforced, public access blocked, and tight IAM. Never in git, never on a shared drive.
+- **Lock the state.** DynamoDB (S3 backend) or the native locking in newer backends. Concurrent applies corrupt state, and recovering a corrupted state file is a manual, high-risk operation.
+- **Never hardcode credentials in `.tf` files.** Use the provider's ambient auth — OIDC from CI, instance profiles, `aws-vault` locally. Variables marked `sensitive = true` are redacted from CLI output but still written to state in the clear.
+- **Plan and apply are different privileges.** Plan needs read; apply needs write. Run plan on PR with a read-only role, apply post-merge with a role only the CI workflow can assume.
+- **Review the plan for destroys.** `terraform plan` output is a security artifact — a module upgrade that quietly replaces a database is indistinguishable from an attack if nobody reads it. Gate on manual approval when the plan contains `destroy` or `replace` of stateful resources.
+- **No `0.0.0.0/0`** on security groups except port 443 on a load balancer. SSH open to the world is how most cloud compromises start.
+- **Enable deletion protection and `prevent_destroy`** on databases, state buckets, and KMS keys. It is the cheapest guard against a bad `-target` or a merged mistake.
+- **Pin modules by commit, not branch.** `ref=v1.2.3` is a mutable tag on most registries; `ref=<sha>` is not. Third-party modules run arbitrary provider calls with your credentials.
+
+```hcl
+terraform {
+  required_version = "~> 1.9"
+  backend "s3" {
+    bucket         = "acme-tfstate"
+    key            = "payments/prod.tfstate"
+    region         = "eu-west-1"
+    encrypt        = true
+    kms_key_id     = "arn:aws:kms:eu-west-1:111122223333:key/<id>"
+    dynamodb_table = "tf-locks"
+  }
+}
+
+resource "aws_db_instance" "main" {
+  # Generated and stored by the secrets manager — never a variable in tfvars.
+  manage_master_user_password = true
+  deletion_protection         = true
+  storage_encrypted           = true
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# ❌ the single most common finding in any Terraform audit
+# ingress { from_port = 22, to_port = 22, cidr_blocks = ["0.0.0.0/0"] }
+```
+
 ## What to avoid
 
 - `terraform apply -auto-approve` on prod from a developer laptop.

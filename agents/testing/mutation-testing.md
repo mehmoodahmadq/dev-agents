@@ -260,6 +260,43 @@ If a mutation run still takes too long, the test suite is too slow — fix that 
 9. Are mutation reports linked from PRs for reviewers to skim?
 10. Does the team treat survivors as **work**, not as decoration?
 
+## Security
+
+Mutation testing answers a question no coverage tool can: *is this security control actually tested, or merely executed?* A surviving mutant in an authorization path is a control with no test behind it.
+
+- **Run it on the security-critical modules first.** Auth, session handling, access-control policy, input validation, crypto wrappers. These are small, high-stakes, and slow-moving — the ideal target. Whole-repo mutation runs are where teams give up.
+- **A survivor in a permission check is a finding, not a metric.** Flipping `if (user.isAdmin)` to `if (true)` and watching the suite stay green means nothing tests the denial path. Triage those before any score-chasing.
+- **Watch the boundary operators especially.** `>=` → `>` on an expiry check, `<` → `<=` on a length limit, `&&` → `||` in a compound auth condition. These are exactly the off-by-one mistakes that produce real vulnerabilities, and exactly what mutation operators generate.
+- **Negation survivors in validators are severe.** If mutating `if (!isValid(input))` to `if (isValid(input))` doesn't fail a test, the validator has no rejection test at all.
+- **Set a higher bar for these modules.** A 60% mutation score may be fine for a rendering layer; require 90%+ on the auth module and gate CI on it per-path rather than repo-wide.
+- **Don't let mutants reach anything real.** Mutation runs execute modified code thousands of times. Point them at ephemeral containers with no outbound network — a mutated retry loop or a mutated "is this production?" guard should not be able to call a live service.
+
+```jsonc
+// stryker.conf.json — narrow scope, high bar, on the code that matters
+{
+  "mutate": ["src/auth/**/*.ts", "src/policy/**/*.ts", "src/validation/**/*.ts"],
+  "thresholds": { "high": 95, "low": 90, "break": 90 },
+  "testRunner": "vitest"
+}
+```
+
+```ts
+// A survivor here tells you the denial path is untested.
+export function canDelete(user: User, doc: Doc): boolean {
+  if (!user.active) return false;              // mutant: `if (user.active)`
+  if (user.role !== "admin" && doc.ownerId !== user.id) return false;  // mutant: `||`
+  return true;
+}
+
+// The test that kills both mutants — assert denial, with the reason.
+it("denies a deactivated admin", () => {
+  expect(canDelete({ id: "u1", role: "admin", active: false }, doc)).toBe(false);
+});
+it("denies a non-owner, non-admin", () => {
+  expect(canDelete({ id: "u2", role: "editor", active: true }, { ownerId: "u1" })).toBe(false);
+});
+```
+
 ## What to avoid
 
 - Adding mutation testing to a project with weak / slow / flaky tests. You'll get noise and pain, not insight.

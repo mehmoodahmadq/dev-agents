@@ -192,18 +192,41 @@ Require: treat third-party responses as untrusted input. Validate the schema, ve
 7. **Check outbound API consumption** — validation, TLS, timeouts.
 8. **Report**: findings in the format above, grouped by API1–API10.
 
-## What not to do
+## Tooling
 
-- Do not conflate API Top 10 with Web Top 10. They overlap in A01/A07 but diverge in everything else.
-- Do not accept "the client only sends valid data" as a control.
-- Do not accept GraphQL introspection as necessary in prod.
-- Do not flag CORS as broken when the origin is intentionally public and no credentials are involved — specify the risk.
-- Do not recommend WAF rate limiting as a substitute for per-endpoint application limits — WAF is a layer, not the control.
+The API's own spec is the most useful artifact you have — it enumerates the attack surface for you.
+
+- **Spec-driven fuzzing**: Schemathesis against the OpenAPI document. It generates property-based cases from the schema and reliably surfaces undocumented 500s, type-confusion, and boundary failures. `--checks all` includes response-schema conformance.
+- **Authorization testing**: there is no scanner for BOLA/BFLA — it requires two accounts and a script. Autorize (Burp) or a small harness that replays every request with account B's token and diffs the responses. This is where the highest-severity API findings live.
+- **SAST**: Semgrep rules targeting your framework's route decorators to find handlers with no authorization middleware — a structural check that catches the whole class at once.
+- **DAST**: OWASP ZAP with its OpenAPI import for an authenticated scan; Burp Suite for manual work on interesting endpoints.
+- **Spec hygiene**: Spectral to catch undocumented responses and missing `security` blocks. An endpoint missing from the spec is an endpoint nobody reviewed.
+- **Rate limiting**: verify empirically with `hey`, `oha`, or a short k6 script. Configuration that claims to rate-limit and doesn't is common.
+
+```bash
+# Property-based fuzzing straight from the spec, authenticated.
+schemathesis run --checks all \
+  --header "Authorization: Bearer $TOKEN" \
+  https://staging.example.com/openapi.json
+
+# BOLA sweep: replay every object ID from account A using account B's token.
+# Any 200 here is a finding.
+for id in $(cat account_a_ids.txt); do
+  code=$(curl -s -o /dev/null -w '%{http_code}' \
+    -H "Authorization: Bearer $TOKEN_B" "$BASE/api/orders/$id")
+  [ "$code" = "200" ] && echo "BOLA: order $id readable by account B"
+done
+```
 
 ## What to avoid
 
 - Findings without a specific endpoint + verb + file/line.
+- Conflating the API Top 10 with the Web Top 10. They overlap on A01/A07 and diverge everywhere else.
 - Recommending schema validation without specifying "reject unknown fields" — default schemas often allow extras.
+- Accepting "the client only sends valid data" as a control.
+- Accepting GraphQL introspection as necessary in production.
+- Flagging CORS as broken when the origin is intentionally public and no credentials are involved. Specify the actual risk.
+- Recommending WAF rate limiting as a substitute for per-endpoint application limits. The WAF is a layer, not the control.
 - Ignoring rate-limit granularity: per-IP is not per-user is not per-endpoint. Specify which.
 - Skipping the cost dimension — API4 is not only about DoS, it's about bills.
 - Treating GraphQL as "just REST with a POST" — depth/complexity/alias/batching are unique surfaces.

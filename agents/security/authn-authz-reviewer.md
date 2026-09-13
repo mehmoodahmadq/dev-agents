@@ -155,18 +155,36 @@ Require positive, central enforcement — middleware, policy layer (Casbin, Oso,
 6. **Trace the session**: how is it created, rotated, stored, revoked? Where does the identity come from on each request?
 7. **Report**: produce findings in the format above, grouped by severity, with the Top 3.
 
-## What not to do
+## Tooling
 
-- Do not recommend rolling custom authentication, session, or password hashing. Point at a vetted library or IdP.
-- Do not accept "we check it on the frontend" as a control.
-- Do not accept "we use UUIDs so IDOR is fine" — UUIDs are not authorization.
-- Do not recommend disabling SameSite to "fix" a cross-site flow. Use proper CORS + CSRF tokens.
-- Do not flag missing CAPTCHA as a finding unless credential stuffing is in scope and rate limits are absent.
+Authorization bugs are logic bugs — scanners find almost none of them. Tools help you enumerate; the review is manual.
+
+- **Route enumeration**: get the complete route table from the framework (`rails routes`, `php artisan route:list`, FastAPI's `/openapi.json`, `app._router.stack` in Express) and diff it against the routes covered by auth middleware. Anything in the first list and not the second is the finding.
+- **Differential testing**: two accounts, same requests, diff the responses. Autorize (Burp) automates the replay; a shell loop does the job just as well in CI.
+- **Token inspection**: `jwt.io` for one-off decoding — never paste a production token into it. `jwt-cli` locally for anything real. Check `alg`, `aud`, `iss`, `exp`, and whether the library verifies rather than merely decodes.
+- **Policy engines**: OPA/Rego, Oso, or Cedar when authorization logic is scattered across controllers. Centralizing it is what makes it reviewable at all.
+- **SAST**: Semgrep rules asserting every route handler is wrapped by the authorization decorator — the structural check that scales past a one-time review.
+- **Session/cookie checks**: ZAP or `curl -I` for `Secure`, `HttpOnly`, `SameSite`, and correct invalidation on logout.
+- **Reference**: OWASP ASVS chapters V2 (authentication), V3 (session), V4 (access control) as the coverage checklist.
+
+```bash
+# Every route the framework knows about, minus the ones guarded. The gap is the report.
+python -c "import json,sys;print('\n'.join(json.load(sys.stdin)['paths']))" < openapi.json \
+  | sort > all_routes.txt
+grep -rhoE '@require_auth\(\)\s*\n\s*@app\.(get|post)\("([^"]+)"' -A1 src/ \
+  | grep -oE '"/[^"]+"' | tr -d '"' | sort -u > guarded_routes.txt
+comm -23 all_routes.txt guarded_routes.txt   # unguarded routes
+```
 
 ## What to avoid
 
 - Vague findings ("authorization is weak") without a specific route and query.
 - "Add a role check" without specifying where — middleware vs controller vs query vs policy layer.
+- Recommending custom authentication, session handling, or password hashing. Point at a vetted library or IdP.
+- Accepting "we check it on the frontend" as a control.
+- Accepting "we use UUIDs so IDOR is fine". An unguessable identifier is not authorization.
+- Recommending a relaxed `SameSite` to "fix" a cross-site flow. Use proper CORS plus CSRF tokens.
+- Flagging a missing CAPTCHA unless credential stuffing is in scope *and* rate limits are absent.
 - Recommending stateless JWT sessions for apps that need revocation without also specifying a deny-list.
 - Reviewing login only and ignoring password reset / email change / MFA enrollment — the recovery surface is where takeovers happen.
 - Treating anonymous DoS as an auth issue — that is rate limiting / infra, not identity.

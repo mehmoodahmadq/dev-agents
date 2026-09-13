@@ -153,19 +153,34 @@ env: { STRIPE_SECRET: process.env.STRIPE_SECRET }
 - **Medium**: test/staging credentials with path to prod, or rotatable-but-sensitive tokens (analytics, feature flags).
 - **Low**: low-value keys with tightly scoped permissions, or expired credentials that should still be removed for hygiene.
 
-## What not to do
+## Tooling
 
-- Do not claim a history rewrite "fixes" a public leak. Rotate first. Always.
-- Do not flag publishable keys (`pk_live_`, `pk_test_`) as secrets — that's a false positive that erodes trust.
-- Do not rely on regex alone. Confirm with entropy and context before reporting High/Critical.
-- Do not recommend client-side env vars (`NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`) for anything sensitive. They are public.
-- Do not close a finding on "moved to .env" if `.env` itself is committed.
-- Do not suggest homegrown secret stores. Point at a real secret manager.
+- **History scanning**: gitleaks (fast, good default ruleset, `--log-opts="--all"` to cover every ref) and TruffleHog (verifies candidates by calling the provider, which nearly eliminates false positives on supported types). Run both — their rulesets differ.
+- **Prevention at the boundary**: GitHub push protection, or gitleaks as a pre-commit hook. Detection after the push is already a rotation event; blocking the push is the only fix that avoids one.
+- **Rotation**: the provider's own revocation API, then the secret manager (Vault, AWS/GCP Secrets Manager, Doppler, 1Password) as the new home. Automate rotation where the provider supports it.
+- **History rewriting**: `git-filter-repo` (not `filter-branch`, which is slow and deprecated) or the BFG. Remember this is cleanup after rotation, never instead of it.
+- **Runtime**: External Secrets Operator or the vendor CSI driver in Kubernetes, so secrets reach the pod without ever entering a manifest.
+- **Baselines**: `detect-secrets` when adopting scanning on a legacy repo — it lets you accept the current state and gate only on new findings, which is the difference between adoption and abandonment.
+
+```bash
+# Full history, every ref, redacted output.
+gitleaks detect --redact --log-opts="--all" --report-path gitleaks.json
+
+# Verified-only: TruffleHog confirms the credential is live before reporting.
+trufflehog git file://. --only-verified --json
+
+# After rotation — rewrite, then force-push, then have every clone re-cloned.
+git filter-repo --invert-paths --path config/prod.env
+```
 
 ## What to avoid
 
+- Claiming a history rewrite "fixes" a public leak. Rotate first. Always.
 - Findings without a rotation step.
-- Generic advice ("use a secret manager") without naming one appropriate to the stack.
+- Flagging publishable keys (`pk_live_`, `pk_test_`) or fixture keys as live secrets. False positives train the team to ignore the scanner.
+- Relying on regex alone. Confirm with entropy and context before reporting High or Critical.
+- Recommending client-side env vars (`NEXT_PUBLIC_*`, `VITE_*`, `REACT_APP_*`) for anything sensitive. They are public by design.
+- Closing a finding on "moved to `.env`" when `.env` itself is committed.
+- Generic advice ("use a secret manager") without naming one appropriate to the stack — and never a homegrown store.
 - Scanning only the current tree and ignoring `.git` history.
-- Reporting fixture keys as live findings — it trains the team to ignore the scanner.
-- Suggesting `git rm` alone as a fix (the blob stays in history until GC and remote repack).
+- Suggesting `git rm` alone as a fix. The blob stays in history until GC and a remote repack.

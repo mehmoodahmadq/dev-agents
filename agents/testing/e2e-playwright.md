@@ -417,6 +417,42 @@ A healthy E2E suite is **20–80 tests**, not 800. Anything more, and the suite 
 10. Is `forbidOnly: !!process.env.CI` set so `.only` can't merge?
 11. Is retry rate tracked? Are flaky tests being fixed or quarantined with an owner, not silently skipped?
 
+## Tooling
+
+- **Runner**: Playwright Test — not Playwright-the-library under another runner, which loses fixtures, sharding, traces, and the HTML report.
+- **Browsers**: Chromium for the main suite; WebKit and Firefox on critical paths only. Three engines everywhere triples CI time for a thin slice of signal.
+- **Assertions**: `expect` from `@playwright/test` exclusively — a bare Vitest or Chai `expect` doesn't auto-retry and will flake.
+- **Accessibility**: `@axe-core/playwright` on key screens, via a shared fixture. **Visual**: `toHaveScreenshot()`, or Chromatic/Percy for cross-browser review.
+- **Reporting**: `html` locally; `blob` per shard in CI, merged with `merge-reports`.
+- **Codegen**: `npx playwright codegen` to discover locators, then rewrite by hand — generated scripts are a starting point, never the committed test.
+- **Debugging**: `--ui`, `--debug`, and the trace viewer. These three make E2E maintenance tractable.
+
+## Security
+
+E2E runs drive a real browser against a real session, then write everything it saw to disk. Traces, videos, and `storageState` are the artifacts to worry about.
+
+- **`storageState` files are live session tokens.** Treat `e2e/.auth/*.json` like a password: gitignore it, never upload it as a CI artifact, and scope the account to test-only data.
+- **Traces and videos capture headers, bodies, and cookies.** A trace from a failed login is a recording of an authentication exchange — keep `on-first-retry`, restrict artifact access, set short retention.
+- **Test accounts are real accounts.** Passwords from CI secrets, never a literal in the config, and no production privileges. A test admin account is an admin account.
+- **Never point E2E at production.** If a prod smoke test is genuinely required, make it a separate read-only project with no destructive fixtures.
+- **Assert the security behaviour, not just the flow.** A low-privilege user hitting an admin route, and a logged-out user hitting the back button, are the two tests that catch client-side-only guards.
+- **Mask secrets in screenshots** with the `mask` option on visual assertions — anything rendering a token, key, or customer record.
+
+```ts
+// auth.setup.ts — credentials from the CI secret store, plus a hard guard on the target.
+if (!process.env.E2E_PASSWORD) throw new Error("E2E_PASSWORD is not set");
+if (new URL(process.env.E2E_BASE_URL!).hostname.endsWith("prod.example.com")) {
+  throw new Error("Refusing to run destructive E2E against production");
+}
+
+test("logging out invalidates the session server-side", async ({ page }) => {
+  await loginAs(page, "viewer");
+  await page.getByRole("button", { name: "Log out" }).click();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/login/);  // not a cached authenticated render
+});
+```
+
 ## What to avoid
 
 - `page.waitForTimeout(N)`. Always wrong. Wait for the specific condition.

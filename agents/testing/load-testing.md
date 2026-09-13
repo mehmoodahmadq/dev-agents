@@ -335,6 +335,45 @@ Anti-pattern: "We hit 12,000 RPS." Without latency, error rate, environment, cod
 9. Is the load generator **not the bottleneck** (CPU, network, file descriptors)?
 10. Does the run **publish reproducible artifacts** (config, fixtures, code SHA)?
 
+## Security
+
+A load test is a denial-of-service attack you have permission to run. The permission is the part people skip.
+
+- **Get written authorization before every run.** Load-testing infrastructure you don't own — a SaaS API, a payment gateway, a CDN — without explicit sign-off breaches most terms of service and is indistinguishable from an attack at the receiving end. Cloud providers require advance notice for high-volume tests; check the current policy before scheduling.
+- **Announce the window.** An unannounced load test pages the on-call engineer, burns error budget, and trains people to ignore alerts. Notify, set a start and end time, and name an abort owner.
+- **Have a kill switch, and test it first.** Know how to stop a distributed run in seconds. Ramp-up without a rehearsed stop is how a test becomes an incident.
+- **Never use production PII as test data.** Load fixtures get committed, copied to load generators, and printed in reports. Generate synthetic users; if you must mirror production shape, pseudonymize before it leaves the database.
+- **Credentials belong in the runner's environment.** k6 and Locust scripts are committed. Read tokens from the environment and fail loudly when absent.
+- **Scrub reports before sharing.** Response-body samples in a failure report routinely contain tokens and customer records — and load-test reports get pasted into chat.
+- **Rate-limiting is part of the system under test.** If the test only passes because you allowlisted the load generator past the WAF and rate limiter, you have measured a system you don't operate. Test both: allowlisted for capacity, and non-allowlisted to confirm throttling actually engages.
+
+```js
+import http from "k6/http";
+import { check } from "k6";
+
+const TOKEN = __ENV.LOAD_TEST_TOKEN;
+if (!TOKEN) throw new Error("LOAD_TEST_TOKEN is not set");
+
+const TARGET = __ENV.LOAD_TEST_TARGET;
+if (!TARGET || TARGET.includes("api.example.com")) {
+  throw new Error("Refusing to load-test production without an explicit staging target");
+}
+
+export const options = {
+  stages: [{ duration: "2m", target: 200 }, { duration: "5m", target: 200 }],
+  // Abort automatically rather than relying on someone watching the dashboard.
+  thresholds: { http_req_failed: [{ threshold: "rate<0.05", abortOnFail: true }] },
+};
+
+export default function () {
+  const res = http.get(`${TARGET}/api/search?q=${syntheticQuery()}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  });
+  // Assert throttling engages rather than treating 429 as a failure to hide.
+  check(res, { "not throttled unexpectedly": (r) => r.status !== 429 });
+}
+```
+
 ## What to avoid
 
 - "Number-only" testing without workload modeling. 50,000 hits on `/health` is not a load test.

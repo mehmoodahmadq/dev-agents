@@ -313,6 +313,74 @@ If your service receives traffic via cloud LB through a NodePort, the deregistra
 9. **Graceful shutdown** — `preStop` + grace period + app handles SIGTERM?
 10. **ConfigMap/Secret** — hashed into pod template annotations so updates roll?
 
+## Tooling
+
+- **Templating**: Helm for things you distribute, Kustomize for things you operate. Don't nest them unless you enjoy debugging rendered YAML.
+- **Validation**: `kubeconform` for schema, `kube-linter` and Polaris for best-practice checks, `conftest`/OPA for org policy — all in CI, before apply.
+- **Admission control**: Kyverno (YAML-native, easier to adopt) or Gatekeeper/OPA. Enforce Pod Security Standards, image-digest pinning, and required labels at the cluster edge.
+- **Delivery**: Argo CD or Flux. Git is the source of truth; nobody runs `kubectl apply` against production from a laptop.
+- **Secrets**: External Secrets Operator or the vendor CSI driver, pulling from Vault/AWS/GCP. Sealed Secrets if you must keep them in git.
+- **Runtime security**: Falco for syscall-level detection, Trivy Operator for continuous image and config scanning in-cluster.
+- **Local/debug**: kind or k3d for CI clusters, `stern` for multi-pod logs, `k9s` for interactive work, `kubectl debug` for ephemeral containers in a distroless pod.
+
+## Security
+
+The cluster's default posture is permissive: pods can run as root, talk to every other pod, and read the cloud metadata endpoint. Every item below is something you must turn *on*.
+
+- **Enforce Pod Security Standards at `restricted`**, namespace-labelled. Without it, `securityContext` is advice rather than policy.
+- **Set the full `securityContext`.** `runAsNonRoot`, a non-zero `runAsUser`, `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, and `seccompProfile: RuntimeDefault`. Omitting seccomp leaves the full syscall surface exposed.
+- **Default-deny NetworkPolicy in every namespace.** Flat pod networking means one compromised pod reaches your database directly. Deny ingress and egress, then allow the specific flows.
+- **Block the metadata endpoint.** Egress to `169.254.169.254` from a pod is a direct path to node IAM credentials. Deny it in NetworkPolicy and use workload identity (IRSA, GKE Workload Identity) for per-pod cloud access.
+- **`automountServiceAccountToken: false`** unless the pod actually calls the API server. That token is a cluster credential mounted into every pod by default.
+- **RBAC without wildcards.** No `*` on verbs or resources, no binding to `cluster-admin`. `escalate`, `bind`, and `impersonate` are privilege escalation primitives — treat them as admin-only.
+- **Secrets are base64, not encrypted.** Enable encryption at rest (KMS provider), restrict `get`/`list` on Secrets via RBAC, and prefer mounted files over env vars — env vars leak into crash dumps, `kubectl describe`, and child processes.
+- **Never `hostNetwork`, `hostPID`, `hostPath`, or `privileged`** in an application workload. Each one is a documented container-escape path; a `hostPath` mount of `/` is game over.
+- **Pin images by digest and verify signatures** at admission. `imagePullPolicy: Always` with a mutable tag means a compromised registry silently redeploys.
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: payments
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]   # deny both; allow-list the rest explicitly
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: api, namespace: payments }
+spec:
+  template:
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: registry.example.com/api@sha256:<digest>
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}
+```
+
 ## What to avoid
 
 - `replicas: 1` in prod for stateless services. Always 2+ behind a PDB.

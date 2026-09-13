@@ -86,6 +86,33 @@ test  = df[df.event_time >= "2025-12-01"]
 - **Confidence intervals or seed variance**: a single-seed comparison is anecdote. Report mean ± std over ≥3 seeds for any claim of improvement.
 - **Hold the test set sacred.** Touch it once before launch. Frequent test-set checks = test-set overfitting.
 
+```python
+import numpy as np
+from sklearn.metrics import average_precision_score, classification_report
+
+# Aggregate numbers hide the failure that gets you in the newspaper.
+# Report per-slice, and refuse to ship on a slice regression.
+def evaluate(model, X, y, slices: dict[str, np.ndarray], baseline_pr_auc: float) -> dict:
+    proba = model.predict_proba(X)[:, 1]
+    overall = average_precision_score(y, proba)      # PR-AUC: correct under imbalance
+
+    per_slice = {
+        name: average_precision_score(y[mask], proba[mask])
+        for name, mask in slices.items()
+        if mask.sum() >= 100                          # don't report noise as a metric
+    }
+
+    regressions = {n: v for n, v in per_slice.items() if v < baseline_pr_auc - 0.02}
+    if regressions:
+        raise ValueError(f"Slice regression vs baseline: {regressions}")
+
+    return {"pr_auc": overall, "slices": per_slice}
+
+# A single seed is an anecdote. Report the spread.
+scores = [evaluate(train(seed=s), X_val, y_val, slices, base)["pr_auc"] for s in (0, 1, 2)]
+print(f"PR-AUC {np.mean(scores):.4f} ± {np.std(scores):.4f}")
+```
+
 ## Deployment patterns
 
 - **Batch inference**: cheapest, simplest, right answer when freshness > minutes is acceptable. Schedule via the data orchestrator; write predictions to a table consumers query.
@@ -120,6 +147,16 @@ Practical setup:
 - **Retraining is a pipeline, not a script.** Same orchestration, tests, and rollouts as initial deployment.
 - **Champion/challenger**: new candidate must beat current production model on the held-out evaluation set by a meaningful margin (defined upfront), not just be different.
 - **Versioned model registry**: every promoted model has a version, a metric report, a dataset hash, a code commit, and a rollback path.
+
+## Tooling
+
+- **Experiment tracking**: MLflow (open, self-hostable) or Weights & Biases. Every run logs params, metrics, the dataset hash, and the code commit — an experiment you can't reproduce is an anecdote.
+- **Pipelines**: Metaflow, Kubeflow, or your existing orchestrator (Dagster/Airflow). Training is a data pipeline; don't invent a second orchestration stack for it.
+- **Data/model versioning**: DVC or LakeFS for datasets, the MLflow Model Registry for promotion and rollback. Git alone doesn't version a 40 GB parquet file.
+- **Feature store**: Feast when online and offline features must match. If you have one model, skip it — the training/serving skew problem it solves isn't worth the operational cost yet.
+- **Serving**: BentoML, KServe, or a plain FastAPI service behind the ordinary deployment pipeline. Batch scoring beats real-time serving whenever the product can tolerate it.
+- **Monitoring**: Evidently or NannyML for drift and performance decay, wired into the same alerting as the rest of your infrastructure.
+- **Environment**: `uv` for dependency resolution, pinned and locked. CUDA/driver versions pinned in the image — "works on my GPU" is the hardest class of bug to debug remotely.
 
 ## Security
 

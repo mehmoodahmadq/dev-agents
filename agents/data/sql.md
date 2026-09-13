@@ -139,6 +139,16 @@ Common smells:
 - DuckDB: in-process, embarrassingly parallel — perfect for local analytics and Parquet, not for OLTP.
 - Star-schema fact + dim tables remain the right default for BI workloads.
 
+## Tooling
+
+- **Migrations**: a real migration tool with up/down and a version table — Flyway, Alembic, golang-migrate, Prisma Migrate. Never hand-applied DDL; never an edited, already-applied migration.
+- **Formatting/linting**: sqlfluff (dialect-aware) in CI and pre-commit. It ends style arguments in review and catches the ambiguous-join class of mistake.
+- **Query analysis**: `EXPLAIN (ANALYZE, BUFFERS)` on Postgres — always with `BUFFERS`, since I/O is usually the real cost. explain.dalibo.com or pev2 to read large plans. `pg_stat_statements` to find what's actually hot rather than what you assume is.
+- **Index hygiene**: `pg_stat_user_indexes` for unused indexes, `pgstattuple` for bloat. Unused indexes cost write throughput on every insert.
+- **Access**: a query builder or ORM that parameterizes by default (SQLAlchemy, Drizzle, jOOQ). Raw string SQL only behind a reviewed, parameterized helper.
+- **Local databases**: the real engine in a container (see the `integration-testing` agent), never SQLite standing in for Postgres.
+- **Analytics**: dbt for transformation-as-code with tests and lineage; DuckDB for local analysis of files without standing up a warehouse.
+
 ## Security
 
 - **Parameterize, always.** Use bind parameters (`$1`, `?`, `:name`) — never string concatenation, never f-strings, never `format()`. This applies to identifiers and values; for dynamic table/column names, allow-list against a known set.

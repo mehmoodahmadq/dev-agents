@@ -301,6 +301,17 @@ URI versioning is the safest default.
 - **Versioning by deploying breaking changes** and hoping clients update. They won't.
 - **Designing the URL before the resource model.** Always model the data first, the URL falls out.
 
+## Tooling
+
+- **Spec**: OpenAPI 3.1, generated from code (FastAPI, NestJS Swagger, tRPC-to-OpenAPI) or written first and used to generate types. Either direction works; a spec maintained by hand alongside the code does not.
+- **Validation**: schema validation at the boundary — Zod, Pydantic, class-validator. Parse into a typed object, don't hand-check fields.
+- **Spec linting**: Spectral with a shared ruleset, in CI. It enforces naming, error shapes, and documented responses without a human arguing about them in review.
+- **Contract testing**: Schemathesis or Dredd to fuzz the live service against its own spec — it reliably finds undocumented 500s.
+- **Client generation**: `openapi-typescript` / `openapi-generator` for consumers. Hand-written clients drift the moment the API changes.
+- **Docs**: Scalar, Redoc, or Stoplight from the spec. `/docs` served from the running service so it can never be stale.
+- **Testing/exploration**: Bruno or Hoppscotch with the collection committed to the repo — unlike the alternatives, these keep requests as plain files in git.
+- **Gateway concerns**: rate limiting, auth, and CORS at the edge (Kong, Envoy, API Gateway) rather than reimplemented per service.
+
 ## Security
 
 For depth, defer to `api-security-reviewer` (OWASP API Top 10). The high-impact basics:

@@ -212,6 +212,27 @@ Red flags:
 - **No lockfile** → generate one today. Commit. Require lockfile in CI with a check.
 - **Floating versions** → pin in the manifest; let the lockfile hold exact versions.
 
+## Tooling
+
+- **Cross-ecosystem scanning**: `osv-scanner` against lockfiles — it queries OSV.dev, which aggregates GitHub Advisories, language registries, and distro trackers, and covers every ecosystem with one tool. Trivy for the same job plus container and IaC scanning.
+- **Native tools as a second pass**: `npm audit --omit=dev`, `pip-audit`, `cargo audit`, `govulncheck`, `bundler-audit`, `mvn dependency-check`. `govulncheck` is the standout — it reports only vulnerabilities in code paths you actually reach, which removes most of the noise.
+- **Reachability**: Semgrep Supply Chain or Endor Labs when volume is the problem. A critical CVE in a function nobody calls outranks nothing.
+- **SBOM**: Syft to generate CycloneDX or SPDX, Grype to scan it. Required under EO 14028 for US federal suppliers and increasingly requested in enterprise procurement.
+- **Updates**: Renovate (more configurable, grouped updates, automerge rules) or Dependabot. Automerge patch-level updates with a green test suite; review minor and major by hand.
+- **License compliance**: `license-checker`, `pip-licenses`, or FOSSA. A GPL transitive dependency in a proprietary product is a legal finding, not a security one — report it separately.
+- **Integrity**: commit lockfiles, enable `npm ci --ignore-scripts` where feasible, and prefer registries with provenance attestation (npm provenance, PyPI trusted publishing).
+
+```bash
+# One scanner, every ecosystem, machine-readable.
+osv-scanner --lockfile=package-lock.json --lockfile=requirements.txt --format json
+
+# Go: only what is actually reachable from your code.
+govulncheck ./...
+
+# SBOM, then scan the SBOM — the artifact you hand to procurement.
+syft dir:. -o cyclonedx-json > sbom.json && grype sbom:sbom.json --fail-on high
+```
+
 ## What to avoid
 
 - Running `npm audit fix --force` blindly — it can introduce breaking changes and downgrade critical packages.

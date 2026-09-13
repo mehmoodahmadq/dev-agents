@@ -140,6 +140,39 @@ Antipatterns:
 - Don't disable the submit button until the form is valid — users may not understand why nothing happens. Allow submit, then show errors.
 - Autocomplete: set `autocomplete="email"`, `"current-password"`, `"new-password"`, etc. — it's an accessibility win for users with motor impairments and password managers.
 
+```html
+<!-- ✅ label, error, and required state all programmatically associated -->
+<form novalidate>
+  <div>
+    <label for="email">Email <span aria-hidden="true">*</span></label>
+    <input
+      id="email"
+      name="email"
+      type="email"
+      autocomplete="email"
+      required
+      aria-required="true"
+      aria-invalid="true"
+      aria-describedby="email-hint email-error"
+    />
+    <p id="email-hint">We'll only use this to send receipts.</p>
+    <p id="email-error" class="error">Enter an email address, like name@example.com.</p>
+  </div>
+
+  <!-- Announced on submit; focus is moved here so the error is unmissable. -->
+  <div role="alert" aria-live="assertive" tabindex="-1" id="form-errors"></div>
+
+  <button type="submit">Create account</button>
+</form>
+```
+
+```html
+<!-- ❌ every association is broken: placeholder as label, colour-only error,
+     and an error message no assistive technology will ever reach. -->
+<input type="email" placeholder="Email" style="border-color: red" />
+<span style="color: red">Invalid</span>
+```
+
 ## Common patterns done right
 
 - **Skip link** — first focusable element on the page, links to `#main`. Visually hidden until focused.
@@ -149,6 +182,33 @@ Antipatterns:
 - **Tabs, menus, comboboxes, trees, sliders** — read APG and follow the keyboard model exactly. These are easy to get subtly wrong.
 - **Loading state** — `aria-busy="true"` on the region; an `aria-live` announcement when done. Don't leave screen-reader users guessing whether anything happened.
 - **Toggle button** — `<button aria-pressed="true|false">`. Toggle the attribute on click. Don't change the visible label between "On" and "Off"; the button's name should be stable.
+
+```html
+<!-- Native <dialog> gives you the focus trap, inert background, and Escape
+     handling for free. Reimplementing those by hand is where bugs live. -->
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Delete workspace?</h2>
+  <p>This removes all 42 projects. It cannot be undone.</p>
+  <form method="dialog">
+    <button value="cancel">Cancel</button>
+    <button value="confirm" autofocus>Delete</button>
+  </form>
+</dialog>
+```
+
+```ts
+const dialog = document.querySelector<HTMLDialogElement>("#confirm")!;
+const opener = document.querySelector<HTMLButtonElement>("#delete-btn")!;
+
+opener.addEventListener("click", () => dialog.showModal());
+
+// Return focus to the control that opened it — otherwise focus lands on <body>
+// and keyboard users have to tab from the top of the page again.
+dialog.addEventListener("close", () => {
+  opener.focus();
+  if (dialog.returnValue === "confirm") deleteWorkspace();
+});
+```
 
 ## Single-page app navigation
 

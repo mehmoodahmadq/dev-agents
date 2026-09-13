@@ -131,6 +131,26 @@ export const env = Env.parse(process.env);
 5. **Top 3 first** — tell the author what to fix today.
 6. **Offer a re-review** when fixes land.
 
+## Tooling
+
+Run the scanners before you read, so your attention goes to what they can't see: logic, authorization, and business-rule flaws.
+
+- **SAST**: Semgrep as the default — fast enough for pre-commit, and its rules are readable YAML, so you can confirm what a finding means instead of trusting a score. CodeQL when you need real interprocedural taint tracking and can afford the runtime.
+- **Language-native linters** carry security rules worth enabling: `bandit` (Python), `gosec` (Go), `cargo clippy` (Rust), `eslint-plugin-security` (JS), Brakeman (Rails), `spotbugs` + find-sec-bugs (Java).
+- **Secrets and dependencies**: gitleaks and `osv-scanner` on every review — see the `secrets-scanner` and `dependency-auditor` agents.
+- **Diff-scoped runs**: `semgrep --baseline-commit` reports only findings the change introduced. Reviewing a PR against the whole repo's backlog is how teams learn to ignore the tool.
+- **Triage discipline**: every machine finding is a hypothesis. Confirm the source reaches the sink before reporting, and suppress false positives inline with a reason (`# nosemgrep: <rule> — <why>`) so the next reviewer sees the reasoning.
+- **Reference**: CWE for classification, OWASP ASVS for coverage. Cite a specific CWE only when you're confident of the ID.
+
+```bash
+# Only what this change introduced.
+semgrep --config auto --baseline-commit origin/main --severity ERROR
+
+# Language-native passes.
+bandit -r src/ -ll          # medium+ severity only
+gosec -severity high ./...
+```
+
 ## What to avoid
 
 - Nitpicks dressed as security findings. "Use const instead of let" is not a security review.

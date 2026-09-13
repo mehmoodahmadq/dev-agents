@@ -245,6 +245,54 @@ If tests get slower than this, find the offenders (`--reporter=verbose --slow-te
 9. Are there snapshots that should be specific assertions?
 10. Are network/DB/filesystem calls absent? If not, this is an integration test.
 
+## Tooling
+
+- **Runner**: Vitest for anything bundled (TS/JS). Jest only on an existing Jest codebase — don't migrate for its own sake. pytest for Python, `go test` for Go, JUnit 5 for Java/Kotlin, xUnit for .NET.
+- **Assertions**: the runner's built-in `expect`. Reach for `vitest-axe`, `jest-extended`, or `testing-library/jest-dom` for domain matchers rather than hand-rolling.
+- **Doubles**: `vi.fn()` / `unittest.mock` for stubs. Prefer a hand-written fake for anything you stub in more than three tests.
+- **Property testing**: fast-check (TS/JS), Hypothesis (Python), jqwik (Java). Worth it for parsers, serializers, and anything with algebraic laws.
+- **Coverage**: `@vitest/coverage-v8` or `coverage.py`, measuring **branches**, not lines. Pair with a mutation score (see the `mutation-testing` agent) — coverage says code ran, mutation says it was checked.
+- **Time/randomness**: `vi.useFakeTimers()`, `freezegun`, or an injected clock. Never `Date.now()` reached directly from code under test.
+- **Watch mode** is the actual interface: `vitest --watch`, `pytest-watch`. Sub-second feedback is the point of this layer.
+
+## Security
+
+Unit tests are where security invariants get pinned down cheaply. They are also where real credentials leak into version control.
+
+- **Never a real secret in a fixture.** Test keys are obviously fake and obviously test-only: `"test-api-key-not-real"`, not a rotated-out production key. A revoked key in git history is still a key in git history, and scanners will flag it forever.
+- **Test the negative case.** An authorization function needs a test that asserts *denial*. Coverage of the happy path proves the feature works; only the denial test proves the control works.
+- **Never weaken production code to make it testable.** No `if (process.env.NODE_ENV === 'test') return true` inside an auth check — that line ships. Inject the policy instead.
+- **Validation belongs under test at the boundary.** Assert that malformed, oversized, and hostile input is *rejected*, with the specific error. Parsers and validators are the highest-value unit-test targets in any codebase.
+- **Pin the encoding, not the appearance.** When testing escaping or sanitizing, assert the exact escaped output. `expect(out).not.toContain('<script>')` passes for `<ScRiPt>` and `<img onerror>` alike.
+- **Fuzz the parsers.** Property-based testing (fast-check, Hypothesis) finds the crash-on-malformed-input class of bug that example-based tests miss by construction.
+- **Don't snapshot anything with a token in it.** Snapshots get committed. Redact before serializing.
+
+```ts
+import { describe, it, expect } from "vitest";
+import fc from "fast-check";
+import { canAccess } from "./policy";
+import { escapeHtml } from "./escape";
+
+// The denial test is the one that matters.
+it("denies a viewer editing another user's document", () => {
+  expect(canAccess({ role: "viewer", id: "u1" }, { ownerId: "u2" }, "edit")).toBe(false);
+});
+
+it("escapes every HTML-significant character", () => {
+  expect(escapeHtml('<img src=x onerror="alert(1)">')).toBe(
+    "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;",
+  );
+});
+
+// Parsers should never throw on hostile input — only reject it.
+it("rejects malformed input without crashing", () => {
+  fc.assert(fc.property(fc.string(), (s) => {
+    const r = parseUserInput(s);
+    expect(r.ok === true || r.error !== undefined).toBe(true);
+  }));
+});
+```
+
 ## What to avoid
 
 - Treating coverage % as the goal. 100% with weak tests is worse than 70% with strong ones.

@@ -235,6 +235,57 @@ services:
 8. **.dockerignore** — present and excluding `.git`, `.env`, `node_modules`?
 9. **Tags** — does deploy reference a digest, not a floating tag?
 
+## Tooling
+
+- **Build**: BuildKit (default in modern Docker) or `docker buildx` for multi-arch and cache mounts. `DOCKER_BUILDKIT=1` if you're on anything older.
+- **Base images**: distroless (`gcr.io/distroless/*`) for compiled languages, Alpine or `-slim` Debian for interpreted ones. Chainguard Images when you want a near-zero-CVE base with a maintained SBOM.
+- **Scanning**: Trivy in CI for image CVEs and misconfiguration; Grype as a second opinion. `docker scout cves` if you're already in the Docker ecosystem.
+- **Linting**: Hadolint on every Dockerfile, in pre-commit and CI. It catches the unpinned-tag and `apt` cache classes of mistake automatically.
+- **Signing/provenance**: Cosign for signatures, `buildx --provenance=true --sbom=true` for SLSA attestations, Syft for standalone SBOM generation.
+- **Size analysis**: `dive` to see what each layer costs and what's wasted.
+- **Registry**: enable immutable tags and automatic vulnerability scanning. Both are off by default on most registries.
+
+## Security
+
+A container is a process with namespaces, not a security boundary you can lean on. Everything below assumes an attacker who has already achieved code execution inside the container.
+
+- **Run as non-root, and enforce it.** `USER app` in the Dockerfile is a default the runtime can override — pair it with `runAsNonRoot: true` in the orchestrator. A root process in a container is root on the host kernel the moment a runtime escape lands.
+- **Read-only root filesystem.** Run with `--read-only` and mount a `tmpfs` for scratch space. Most applications need no writable filesystem, and this removes the attacker's easiest persistence and tool-drop location.
+- **Drop every capability, add back nothing.** `--cap-drop=ALL`. Binding port 80 is not a reason for `NET_BIND_SERVICE` — listen on 8080 and map it.
+- **`no-new-privileges` always.** It blocks setuid escalation inside the container and costs nothing.
+- **Never bind-mount the Docker socket.** `/var/run/docker.sock` in a container is unauthenticated root on the host — it is the single most exploited container misconfiguration. For docker-in-docker CI, use a rootless or sysbox runtime instead.
+- **Secrets never enter the image.** Not `ENV`, not `ARG` (both persist in layer metadata that `docker history` prints), not a `COPY`'d `.env` deleted in a later layer — the layer still contains it. Use `RUN --mount=type=secret` at build time and the orchestrator's secret mounts at runtime.
+- **Pin by digest.** `FROM node:22-slim@sha256:...`. Tags are mutable; a repointed base tag is an unreviewed supply-chain change.
+- **Scan and sign in CI, verify at deploy.** An unsigned image that nobody verifies makes the signing step decorative — enforce it with an admission policy.
+
+```dockerfile
+FROM node:22-slim@sha256:<pin-the-current-digest> AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+# Build-time secret: mounted, used, and never committed to a layer.
+RUN --mount=type=secret,id=npm_token \
+    NPM_TOKEN="$(cat /run/secrets/npm_token)" npm run build
+
+FROM gcr.io/distroless/nodejs22-debian12@sha256:<pin-the-current-digest>
+WORKDIR /app
+COPY --from=build --chown=nonroot:nonroot /app/dist ./dist
+COPY --from=build --chown=nonroot:nonroot /app/node_modules ./node_modules
+USER nonroot
+EXPOSE 8080
+CMD ["dist/server.js"]
+```
+
+```bash
+docker run \
+  --read-only --tmpfs /tmp \
+  --cap-drop=ALL \
+  --security-opt no-new-privileges \
+  --user 65532:65532 \
+  -p 8080:8080 myapp@sha256:<digest>
+```
+
 ## What to avoid
 
 - `FROM ubuntu:latest` or any unpinned tag in production.

@@ -141,19 +141,48 @@ Sentry.init({
 - **Deletion jobs as code**: a scheduled deletion job per data class with dry-run mode and audit output.
 - **DSAR runbook as code**: deletion/export implemented as a callable operation, not a ticket.
 
-## What not to do
+## Tooling
 
-- Do not render legal opinions ("this is GDPR compliant"). Identify technical posture; route binary legal questions to legal.
-- Do not accept "we hash emails so it's anonymized" — it isn't.
-- Do not accept deletion that only soft-deletes in the primary DB.
-- Do not treat IP addresses as non-personal — they are personal data under GDPR.
-- Do not accept a cookie banner as consent when scripts load before the user clicks.
-- Do not duplicate `crypto-reviewer` on encryption details — refer to it.
+Privacy review is mostly reading schemas and data flows. Tools help you find personal data you didn't know you had.
+
+- **Discovery**: Microsoft Presidio to detect and anonymize PII in text, logs, and database columns — open source, extensible with custom recognizers for your domain identifiers. `piicatcher` for column-level scanning across warehouses.
+- **Schema review**: read the migrations, not just the current schema. A column dropped from the ORM model often still exists in the table, and still holds data.
+- **Log scanning**: grep your log aggregator for email patterns, national ID formats, and card-shaped numbers. Logs are the most common place personal data ends up unplanned and unretained-for.
+- **Redaction in the pipeline**: the OpenTelemetry Collector's `redaction` processor, or your logging library's serializers. Enforce centrally — see the `observability` agent.
+- **Data mapping**: keep the RoPA (GDPR Article 30 record of processing) as a file in the repo next to the code, generated or reviewed on schema change. A record maintained only by the legal team is always out of date.
+- **Third-party flows**: audit the client bundle for analytics, session-replay, and ad SDKs. Session replay tools capture form inputs by default — that is a data export most teams never consciously approved.
+- **Consent**: verify the consent state actually gates the SDK's initialization, not just a cookie banner's appearance. Loading the tag and then "respecting" consent is not consent.
+
+```python
+from presidio_analyzer import AnalyzerEngine
+from presidio_anonymizer import AnonymizerEngine
+
+analyzer, anonymizer = AnalyzerEngine(), AnonymizerEngine()
+
+def scrub(text: str) -> str:
+    findings = analyzer.analyze(
+        text=text,
+        entities=["EMAIL_ADDRESS", "PHONE_NUMBER", "CREDIT_CARD", "PERSON", "IP_ADDRESS"],
+        language="en",
+    )
+    return anonymizer.anonymize(text=text, analyzer_results=findings).text
+```
+
+```sql
+-- Retention is a control, not a policy document. Make it executable.
+DELETE FROM events WHERE created_at < now() - interval '90 days';
+```
 
 ## What to avoid
 
-- Listing every field as "PII" without classifying sensitivity — dilutes the review.
-- Generic recommendations ("become GDPR compliant") — useless.
+- Rendering legal opinions ("this is GDPR compliant"). Identify technical posture; route binary legal questions to legal.
+- Listing every field as "PII" without classifying sensitivity. It dilutes the review.
+- Generic recommendations ("become GDPR compliant"). Useless to the person who has to act on them.
+- Accepting "we hash emails so it's anonymized". It isn't — a hashed identifier is still an identifier.
+- Accepting deletion that only soft-deletes in the primary database.
+- Treating IP addresses as non-personal. They are personal data under GDPR.
+- Accepting a cookie banner as consent when scripts load before the user clicks.
+- Duplicating `crypto-reviewer` on encryption details — refer to it.
 - Missing the telemetry surfaces. Most real PII leaks live in logs, errors, and analytics, not the primary DB.
 - Ignoring backups, warehouses, and exports — they're in scope.
 - Confusing anonymization with pseudonymization in the report — pick the right word.
