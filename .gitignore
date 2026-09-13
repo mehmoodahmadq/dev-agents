@@ -1,0 +1,6 @@
+# Local agent tooling — not part of the published catalog
+CLAUDE.md
+.claude/
+
+# macOS
+.DS_Store
