@@ -149,12 +149,16 @@ client.messages.create(
 | [mongodb](agents/databases/mongodb.md) | MongoDB 7/8 | Embed vs reference, ESR index rule, aggregation pipelines, read/write concerns, shard keys, change streams, operator injection |
 | [redis](agents/databases/redis.md) | Redis 7+ / Valkey | Structure selection, key schemas & TTLs, stampede control, Lua rate limits, streams over pub/sub, eviction, ACLs |
 | [elasticsearch](agents/databases/elasticsearch.md) | Elasticsearch 8/9, OpenSearch | Strict mappings, text vs keyword, filter context, hybrid BM25 + kNN with RRF, ILM & data streams, shard sizing, reindex behind an alias |
+| [dynamodb](agents/databases/dynamodb.md) | Amazon DynamoDB | Access-pattern-first single-table design, GSI overloading & sparse indexes, paginated Query, conditional writes & optimistic locking, hot partitions, Streams & TTL, LeadingKeys IAM |
 
 ### Mobile
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
 | [react-native](agents/mobile/react-native.md) | React Native 0.76+ / Expo | New Architecture, Expo Router, FlashList & Reanimated 3, offline-first storage, EAS Build/Update, SecureStore, deep-link validation |
+| [flutter](agents/mobile/flutter.md) | Flutter stable / Dart 3 | Riverpod codegen, go_router auth redirects, sealed classes & patterns, isolates for parsing, rebuild & paint performance, Pigeon, golden tests, dart-define secrets |
+| [ios-native](agents/mobile/ios-native.md) | SwiftUI / iOS 18+ | Observation, value-based NavigationStack, SwiftData & Keychain, main-actor discipline, Instruments, Swift Testing, TestFlight phased release, App Attest & privacy manifests |
+| [android-native](agents/mobile/android-native.md) | Kotlin / Jetpack Compose | ViewModel + StateFlow UDF, type-safe navigation, Room & WorkManager, Compose stability, Baseline Profiles & R8, exported components, PendingIntent, Keystore + Tink |
 
 ---
 
@@ -221,16 +225,15 @@ agents/
   devops/        docker, kubernetes, terraform, github-actions, observability, sre
   testing/       unit-testing, integration-testing, e2e-playwright, client-testing,
                  load-testing, mutation-testing
-  databases/     postgres, mongodb, redis, elasticsearch
-  mobile/        react-native (swift and kotlin may move here)
+  databases/     postgres, mongodb, redis, elasticsearch, dynamodb
+  mobile/        react-native, flutter, ios-native, android-native
 ```
 
 Planned domains:
 
 ```
 agents/
-  mobile/        flutter, ios-native, android-native
-  databases/     dynamodb, clickhouse, cassandra
+  databases/     clickhouse, cassandra
 ```
 
 Naming: `<stack-or-tool>.md` — lowercase, hyphenated, no version numbers in filenames.
