@@ -63,18 +63,18 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [typescript](agents/languages/typescript.md) | Type-safe TypeScript | Strict mode, Zod, discriminated unions, `satisfies`, no `any` |
-| [javascript](agents/languages/javascript.md) | Modern JavaScript | ES2020+, async/await, Web APIs, zero-dep mindset |
-| [python](agents/languages/python.md) | Idiomatic Python | Type hints, Pydantic, asyncio, Ruff, mypy strict |
-| [go](agents/languages/go.md) | Production Go | Explicit errors, small interfaces, errgroup, context propagation |
-| [rust](agents/languages/rust.md) | Systems Rust | Ownership, `thiserror`/`anyhow`, Tokio, zero-cost abstractions |
-| [java](agents/languages/java.md) | Modern Java 21 | Records, sealed classes, Spring Boot, constructor injection |
-| [csharp](agents/languages/csharp.md) | C# 12 / .NET 8 | Nullable safety, ASP.NET Core, EF Core, async end-to-end |
-| [ruby](agents/languages/ruby.md) | Idiomatic Ruby / Rails | Service objects, thin controllers, RSpec, security-first Rails |
-| [swift](agents/languages/swift.md) | Modern Swift | SwiftUI, Swift Concurrency, `Actor`, value semantics |
-| [kotlin](agents/languages/kotlin.md) | Modern Kotlin | Coroutines, Flow, Compose, MVVM, null safety |
-| [php](agents/languages/php.md) | Modern PHP 8.3+ | `strict_types`, readonly classes, enums, PHPStan max, Symfony/Laravel |
-| [erlang](agents/languages/erlang.md) | Erlang / OTP | Supervision trees, gen_server, Dialyzer, let-it-crash, rebar3 |
+| [typescript](agents/languages/typescript.md) | Type-safe TypeScript | Strict + erasable tsconfig, Zod 4 at boundaries, discriminated unions & exhaustiveness, branded types, `NoInfer`, no floating promises, package publishing |
+| [javascript](agents/languages/javascript.md) | Modern JavaScript (Node LTS + browser) | Platform-first built-ins, AbortSignal cancellation, bounded concurrency, graceful shutdown, JSDoc `@ts-check`, rebinding-safe SSRF |
+| [python](agents/languages/python.md) | Python 3.13+ | uv + Ruff + strict pyright, PEP 695 generics, Pydantic & slotted dataclasses, TaskGroup concurrency, Hypothesis, `tarfile` filters |
+| [go](agents/languages/go.md) | Production Go | Error wrapping, ServeMux routing & graceful shutdown, iterators & generics, errgroup, slog, synctest & fuzzing, `os.Root`, SSRF-safe dialer |
+| [rust](agents/languages/rust.md) | Rust 2024 edition | Ownership & newtypes, `thiserror`/`anyhow`, Tokio JoinSet & cancellation safety, axum, workspace lints, proptest & Miri |
+| [java](agents/languages/java.md) | Java 25 LTS / Spring Boot | Records & sealed pattern matching, virtual threads, JSpecify nullness, RestClient & JdbcClient, JPA without N+1, ProblemDetail, Modulith |
+| [csharp](agents/languages/csharp.md) | C# 14 / .NET 10 LTS | Minimal APIs with TypedResults, options validation, resilience handlers, EF Core `ExecuteUpdate`, TimeProvider, xUnit v3 + Testcontainers |
+| [ruby](agents/languages/ruby.md) | Ruby 3 / Rails 8 | `Data` value objects, pattern matching, `params.expect`, strict loading, Solid Queue jobs, `rate_limit`, Brakeman |
+| [swift](agents/languages/swift.md) | Swift 6 language mode | Typed throws, Sendable & actor reentrancy, bounded task groups, `Mutex`, noncopyable types, SwiftPM, Swift Testing, server-side Swift |
+| [kotlin](agents/languages/kotlin.md) | Kotlin 2.x (JVM, server, KMP) | Sealed & value classes, cancellation-correct coroutines, Flow operators, Ktor, Multiplatform, Turbine |
+| [php](agents/languages/php.md) | PHP 8.4+ | `strict_types`, property hooks & asymmetric visibility, readonly DTOs, PHPStan max, Doctrine/Eloquent without N+1, worker-mode safety |
+| [erlang](agents/languages/erlang.md) | Erlang / OTP 27+ | Supervision design, gen_server & gen_statem, `maybe`, built-in `json`, backpressure, recon, TLS distribution |
 
 ### Security
 
