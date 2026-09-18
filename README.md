@@ -95,9 +95,9 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [sql](agents/data/sql.md) | Production SQL | Postgres/MySQL/SQLite + OLAP; schema, indexes, plans, parameterization, RLS |
-| [data-pipelines](agents/data/data-pipelines.md) | Batch & streaming pipelines | ELT, medallion, dbt, Airflow/Dagster, idempotency, backfills, observability |
-| [ml-workflows](agents/data/ml-workflows.md) | Production ML | Reproducibility, eval, train/serve parity, deployment, drift monitoring, security |
+| [sql](agents/data/sql.md) | Production SQL | Schema & index design, sargable predicates, NULL semantics & `NOT IN` traps, keyset pagination, plan reading, safe migrations, parameterization, RLS |
+| [data-pipelines](agents/data/data-pipelines.md) | Batch & streaming pipelines | ELT & medallion, idempotent watermarked loads, dbt contracts & late-arriving data, Iceberg/Delta layout, backfills, quarantine, observability |
+| [ml-workflows](agents/data/ml-workflows.md) | Production ML & LLM systems | Reproducibility, leakage & slice-aware evaluation, train/serve parity, LLM evals & RAG quality, shadow/canary rollouts, drift monitoring, prompt-injection containment |
 
 ### Frontend
 

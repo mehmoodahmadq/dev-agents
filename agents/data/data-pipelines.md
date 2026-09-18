@@ -42,16 +42,21 @@ Never let consumers query bronze. Never let bronze depend on gold. Lineage flows
 
 ```python
 # ✅ Idempotent batch upsert with watermark + overlap
-last = state.get_watermark("orders") or datetime(2024, 1, 1, tzinfo=UTC)
-since = last - timedelta(minutes=5)  # overlap window
+def load_orders(source, warehouse, state) -> None:
+    last = state.get_watermark("orders") or datetime(2024, 1, 1, tzinfo=UTC)
+    since = last - timedelta(minutes=5)  # overlap window
 
-rows = source.fetch_orders(updated_since=since)
-warehouse.merge(
-    target="bronze.orders",
-    source=rows,
-    keys=["order_id", "_source_updated_at"],  # natural key + change-time
-)
-state.set_watermark("orders", max(r["updated_at"] for r in rows))
+    rows = source.fetch_orders(updated_since=since)
+    if not rows:
+        return  # nothing to load, and nothing to advance: max() of an empty batch would raise
+
+    warehouse.merge(
+        target="bronze.orders",
+        source=rows,
+        keys=["order_id", "_source_updated_at"],  # natural key + change-time
+    )
+    # Advance only after the merge commits, so a crash mid-load replays the window.
+    state.set_watermark("orders", max(r["updated_at"] for r in rows))
 ```
 
 ## Orchestration
@@ -94,7 +99,11 @@ select
   updated_at
 from {{ source('bronze', 'orders') }}
 {% if is_incremental() %}
-  where updated_at > (select coalesce(max(updated_at), '1900-01-01') from {{ this }})
+  -- Look back beyond the high-water mark: a strict `>` silently drops rows that
+  -- arrived late or were written with an earlier updated_at than the last run saw.
+  where updated_at >= (
+    select coalesce(max(updated_at), '1900-01-01') - interval '3 days' from {{ this }}
+  )
 {% endif %}
 ```
 
@@ -138,6 +147,14 @@ models:
       # Freshness and volume drift — the two that catch a silently broken source.
       - dbt_utils.recency: { datepart: hour, field: created_at, interval: 6 }
 ```
+
+## Table formats and storage layout
+
+- **Open table formats** (Iceberg, Delta Lake) for anything at scale: atomic commits, schema evolution, time travel, and safe concurrent writes. Plain Parquet directories give you none of that, and a failed job leaves half-written partitions readable.
+- **Partition by the column you filter on**, usually an event date — not by a high-cardinality key, which produces millions of tiny files.
+- **Compaction is maintenance you must schedule.** Streaming and frequent micro-batches create small files; query planning time grows with file count.
+- Time travel makes rollback cheap: a bad transform is reverted by pointing consumers at the previous snapshot rather than by restoring from backup.
+- Keep raw landing data in object storage in its original form, even after it's loaded. Re-deriving a table from source beats explaining why you can't.
 
 ## Backfills and reprocessing
 

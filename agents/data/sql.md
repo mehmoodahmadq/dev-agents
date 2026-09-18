@@ -22,18 +22,18 @@ You are dialect-aware: PostgreSQL, MySQL, SQLite, and the OLAP engines (Snowflak
 - `NOT NULL` by default. Nullable columns are an explicit decision, documented with `COMMENT ON COLUMN`.
 - Money is `numeric(p, s)` (Postgres) / `DECIMAL` (MySQL). Never `float`/`double`.
 - Timestamps are `timestamptz` (Postgres). Store UTC. Convert at the edge.
-- IDs: `uuid` (random, v4 or v7) for distributed systems; `bigint` identity for single-DB systems where ordering and size matter.
+- IDs: `bigint` identity where a single database owns the sequence. When you need client-generated or distributed IDs, prefer **UUIDv7** — it is time-ordered, so inserts land at the right edge of the B-tree. Random v4 keys scatter writes across the whole index, inflating it and hurting cache hit rates.
 - Soft deletes via `deleted_at timestamptz` only when audit/recovery requires it — otherwise hard delete and rely on backups.
 - Foreign keys: declare them. The performance cost is small; the correctness gain is large. Use `ON DELETE` explicitly (`CASCADE`, `RESTRICT`, `SET NULL`).
 
 ```sql
 -- ✅ Postgres
 CREATE TABLE orders (
-  id            uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+  id            uuid        PRIMARY KEY DEFAULT uuidv7(),   -- Postgres 18+; generate v7 in the app on older versions
   user_id       uuid        NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
   status        text        NOT NULL CHECK (status IN ('pending','paid','refunded','cancelled')),
   total_cents   bigint      NOT NULL CHECK (total_cents >= 0),
-  currency      char(3)     NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
+  currency      text        NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),   -- not char(3): it blank-pads and compares oddly
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
@@ -100,6 +100,52 @@ SELECT user_id, id, created_at FROM (
   FROM orders
 ) t WHERE rn = 1;
 ```
+
+### Predicates that defeat an index
+
+An index is only used when the predicate is *sargable* — the indexed expression appears bare on one side of the comparison.
+
+```sql
+-- ❌ A function on the column: the index on created_at can't be used
+WHERE date(created_at) = '2026-09-18'
+-- ✅ A half-open range over the raw column
+WHERE created_at >= '2026-09-18' AND created_at < '2026-09-19'
+
+-- ❌ Leading wildcard: no B-tree can help
+WHERE email LIKE '%@example.com'
+-- ✅ Index the reversed value, or use a trigram index (Postgres pg_trgm)
+CREATE INDEX users_email_trgm_idx ON users USING gin (email gin_trgm_ops);
+
+-- ❌ Implicit cast (varchar column compared to a number) silently disables the index
+WHERE account_number = 12345
+-- ✅ Compare like for like
+WHERE account_number = '12345'
+
+-- ❌ OR across different columns often forces a full scan
+WHERE email = $1 OR phone = $1
+-- ✅ Two indexed lookups the planner can combine
+SELECT ... WHERE email = $1 UNION ALL SELECT ... WHERE phone = $1
+```
+
+Case-insensitive matching belongs in an expression index (`lower(email)`) or a `citext`/collation choice — not in a `lower()` call the index doesn't know about.
+
+### NULL semantics
+
+SQL is three-valued logic, and the surprises are always about `NULL`.
+
+```sql
+-- ❌ If the subquery returns a single NULL, this matches nothing. Silently.
+SELECT * FROM orders WHERE user_id NOT IN (SELECT user_id FROM banned_users);
+
+-- ✅ NOT EXISTS handles NULLs correctly and usually plans better
+SELECT * FROM orders o
+WHERE NOT EXISTS (SELECT 1 FROM banned_users b WHERE b.user_id = o.user_id);
+```
+
+- `NULL = NULL` is unknown, not true. Use `IS NULL`, or `IS NOT DISTINCT FROM` to treat NULLs as equal.
+- `count(*)` counts rows; `count(col)` skips NULLs. `avg`, `sum`, and friends ignore NULLs, so an average over a column with missing values is an average of the present ones.
+- Concatenation with `||` yields NULL if any operand is NULL — use `concat()` or `coalesce()`.
+- `UNIQUE` allows multiple NULLs by default; if only one "no value" row is allowed, add a partial unique index or `NULLS NOT DISTINCT` (Postgres 15+).
 
 ## Transactions and concurrency
 
