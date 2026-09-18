@@ -103,11 +103,11 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [react](agents/frontend/react.md) | React 18/19 | Composition API, hooks rules, RSC/Next App Router, TanStack Query, Suspense, Compiler-aware |
-| [vue](agents/frontend/vue.md) | Vue 3 / Nuxt 3 | Composition API + `<script setup>`, runes-style reactivity, Pinia setup stores, server actions |
-| [svelte](agents/frontend/svelte.md) | Svelte 5 / SvelteKit | Runes (`$state`/`$derived`/`$effect`), form actions, server vs universal load, env separation |
-| [css](agents/frontend/css.md) | Modern CSS | `@layer`, container queries, design tokens, logical properties, `:has()`, motion preferences |
-| [accessibility](agents/frontend/accessibility.md) | WCAG 2.2 AA | Semantic HTML, keyboard, focus management, ARIA patterns, screen-reader testing |
+| [react](agents/frontend/react.md) | React 19 | State ownership & derived values, effect events, Actions & `useOptimistic`, Suspense + error boundaries, Server Components, React Compiler, TanStack Query |
+| [vue](agents/frontend/vue.md) | Vue 3.5+ / Nuxt 4 | `<script setup>`, reactive props destructure, `useTemplateRef`, `onWatcherCleanup`, Pinia setup stores, Nuxt server routes & runtimeConfig |
+| [svelte](agents/frontend/svelte.md) | Svelte 5 / SvelteKit | Runes, snippets & attachments, `<svelte:boundary>`, `$app/state`, streamed loads, form actions, server-only modules |
+| [css](agents/frontend/css.md) | Modern CSS | `@layer` & `@scope`, container queries, `light-dark()` tokens in oklch, `@property`, `@starting-style`, `:has()`, Tailwind v4, CSS exfiltration |
+| [accessibility](agents/frontend/accessibility.md) | WCAG 2.2 AA | New 2.2 criteria (target size, dragging, accessible auth), semantic HTML, focus management, ARIA patterns, captions & transcripts, reflow, AT testing |
 
 ### Backend
 
