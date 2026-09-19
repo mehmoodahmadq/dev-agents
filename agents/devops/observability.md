@@ -195,14 +195,16 @@ The root span isn't being propagated through your queue/worker handoff (lost `tr
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
-import { SemanticResourceAttributes } from '@opentelemetry/semantic-conventions';
+import { resourceFromAttributes } from '@opentelemetry/resources';
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 
 const sdk = new NodeSDK({
-  resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
-    [SemanticResourceAttributes.SERVICE_VERSION]: process.env.SERVICE_VERSION,
-    [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV,
+  resource: resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: process.env.OTEL_SERVICE_NAME,
+    [ATTR_SERVICE_VERSION]: process.env.SERVICE_VERSION,
+    // Renamed from `deployment.environment`; still incubating, so use the literal
+    // rather than importing an export path that moves between releases.
+    'deployment.environment.name': process.env.NODE_ENV,
   }),
   traceExporter: new OTLPTraceExporter({ url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT }),
   instrumentations: [getNodeAutoInstrumentations({
@@ -211,8 +213,14 @@ const sdk = new NodeSDK({
 });
 
 sdk.start();
-process.on('SIGTERM', () => sdk.shutdown());
+process.on('SIGTERM', () => { void sdk.shutdown(); });
 ```
+
+Two API changes catch people upgrading to the 2.x SDK, because both fail at import rather than at runtime: `new Resource(...)` is gone in favour of `resourceFromAttributes(...)`, and the `SemanticResourceAttributes` enum is replaced by individual `ATTR_*` constants. Snippets predating that are still the top search results, so check the import list first when an otherwise-correct setup won't start.
+
+Load this file before anything else — `node --import ./telemetry.js app.js`. Auto-instrumentation patches modules as they are required, so anything imported before the SDK starts is silently uninstrumented, which presents as "traces work except for the database".
+
+Most of the resource configuration can also come from the environment (`OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_EXPORTER_OTLP_ENDPOINT`), which is the better default in Kubernetes: the same image reports correctly per environment with no rebuild.
 
 The auto-instrumentations cover http, fetch, pg, mysql, redis, gRPC, etc. Disable the noisy ones (`fs`, `dns`) up front.
 
@@ -292,3 +300,5 @@ span.setAttribute("tenant.id", tenantId);
 - Letting health-check requests dominate your traces and metrics. Filter at the Collector.
 - Vendor-locked SDKs when OpenTelemetry covers it. Instrument once, route anywhere.
 - "We'll add observability later." Later is during the incident, and it's too late.
+- Initialising the OTel SDK after your app's imports. Auto-instrumentation patches on require; anything loaded first is invisible.
+- Copying an OTel setup snippet without checking it against the 2.x API. `new Resource(...)` and `SemanticResourceAttributes` no longer exist.

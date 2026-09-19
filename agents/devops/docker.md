@@ -21,7 +21,7 @@ For misconfiguration **audit** of a Dockerfile (privileged flags, secret leakage
 
 ```dockerfile
 # syntax=docker/dockerfile:1.7
-ARG NODE_VERSION=20.18.0
+ARG NODE_VERSION=22.22.0
 
 FROM node:${NODE_VERSION}-bookworm-slim AS deps
 WORKDIR /app
@@ -36,7 +36,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci
 COPY . .
 RUN npm run build
 
-FROM gcr.io/distroless/nodejs20-debian12:nonroot AS runtime
+FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=deps  /app/node_modules ./node_modules
@@ -139,7 +139,14 @@ Always: `--no-install-recommends`, pin major versions where it matters, clean li
 ## Signals, init, healthcheck
 
 - Use **exec form** for `CMD`/`ENTRYPOINT`: `CMD ["node", "dist/server.js"]`. Shell form (`CMD node ...`) wraps in `/bin/sh -c`, so SIGTERM hits the shell, not your app.
-- If you have child processes (Python multiprocess, shell wrappers), add `tini`: `ENTRYPOINT ["/usr/bin/tini", "--"]`. Distroless has `tini` baked in.
+- If you have child processes (Python multiprocess, shell wrappers), you need an init to reap zombies and forward signals. **Distroless does not ship one** — it has no shell and no `tini`, so `ENTRYPOINT ["/usr/bin/tini", "--"]` on a distroless base fails at startup. Copy a static build in yourself:
+
+  ```dockerfile
+  COPY --from=ghcr.io/krallin/tini:static /tini /tini
+  ENTRYPOINT ["/tini", "--", "node", "dist/server.js"]
+  ```
+
+  On Docker/Compose, `docker run --init` injects one without changing the image. On Kubernetes there is no equivalent flag — bake it in, or make the app reap its own children. Most single-process services need none of this; reach for it only when you actually fork.
 - Implement graceful shutdown in the app (close server, drain queues, flush logs) on SIGTERM. Kubernetes sends SIGTERM → grace period → SIGKILL.
 - `HEALTHCHECK` is useful for Compose / standalone Docker. Kubernetes ignores it — use Pod probes instead.
 
@@ -212,7 +219,7 @@ services:
       db:
         condition: service_healthy
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "app"]
       interval: 2s
@@ -238,7 +245,7 @@ services:
 ## Tooling
 
 - **Build**: BuildKit (default in modern Docker) or `docker buildx` for multi-arch and cache mounts. `DOCKER_BUILDKIT=1` if you're on anything older.
-- **Base images**: distroless (`gcr.io/distroless/*`) for compiled languages, Alpine or `-slim` Debian for interpreted ones. Chainguard Images when you want a near-zero-CVE base with a maintained SBOM.
+- **Base images**: distroless (`gcr.io/distroless/*`) for compiled languages, Alpine or `-slim` Debian for interpreted ones. Distroless publishes per-Debian-release tags (`static-debian12`, `static-debian13`) — pick one explicitly and move deliberately, because the unsuffixed tag rolls to a new Debian under you. Chainguard Images when you want a near-zero-CVE base with a maintained SBOM.
 - **Scanning**: Trivy in CI for image CVEs and misconfiguration; Grype as a second opinion. `docker scout cves` if you're already in the Docker ecosystem.
 - **Linting**: Hadolint on every Dockerfile, in pre-commit and CI. It catches the unpinned-tag and `apt` cache classes of mistake automatically.
 - **Signing/provenance**: Cosign for signatures, `buildx --provenance=true --sbom=true` for SLSA attestations, Syft for standalone SBOM generation.
