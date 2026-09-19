@@ -145,10 +145,10 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [postgres](agents/databases/postgres.md) | PostgreSQL 15+ in production | Schema & index design, plan reading, lock-safe migrations, vacuum/bloat, partitioning, PgBouncer, PITR, roles & RLS |
-| [mongodb](agents/databases/mongodb.md) | MongoDB 7/8 | Embed vs reference, ESR index rule, aggregation pipelines, read/write concerns, shard keys, change streams, operator injection |
-| [redis](agents/databases/redis.md) | Redis 7+ / Valkey | Structure selection, key schemas & TTLs, stampede control, Lua rate limits, streams over pub/sub, eviction, ACLs |
-| [elasticsearch](agents/databases/elasticsearch.md) | Elasticsearch 8/9, OpenSearch | Strict mappings, text vs keyword, filter context, hybrid BM25 + kNN with RRF, ILM & data streams, shard sizing, reindex behind an alias |
+| [postgres](agents/databases/postgres.md) | PostgreSQL 17/18 in production | Schema & index design, plan reading, `ON CONFLICT` vs `MERGE`, lock-safe migrations, vacuum/bloat, partitioning, PgBouncer, PITR, roles & RLS |
+| [mongodb](agents/databases/mongodb.md) | MongoDB 8 | Embed vs reference, ESR index rule, aggregation pipelines, read/write concerns, shard keys, time-series collections, change streams, operator injection |
+| [redis](agents/databases/redis.md) | Redis 8 / Valkey 8 | Structure selection, lazy-expiry semantics, stampede control, Lua rate limits, streams over pub/sub, client-side caching, cluster hash tags, eviction, ACLs |
+| [elasticsearch](agents/databases/elasticsearch.md) | Elasticsearch 9, OpenSearch | Strict mappings, text vs keyword, filter context, hybrid BM25 + kNN with RRF, quantized vectors & `semantic_text`, ILM & data streams, shard sizing, cluster triage |
 | [dynamodb](agents/databases/dynamodb.md) | Amazon DynamoDB | Access-pattern-first single-table design, GSI overloading & sparse indexes, paginated Query, conditional writes & optimistic locking, hot partitions, Streams & TTL, LeadingKeys IAM |
 
 ### Mobile
