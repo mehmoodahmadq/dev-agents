@@ -89,10 +89,10 @@ export const env = Env.parse(process.env);
 - NoSQL: reject operator objects from the client (e.g., strip `$`-prefixed keys before passing to Mongo).
 
 ### 7. SSRF & outbound requests
-- Any `fetch(userUrl)` / `requests.get(user_url)` → require hostname resolution + private-IP rejection before the request.
-- Redirects: disable or re-validate after each hop.
+- Any `fetch(userUrl)` / `requests.get(user_url)` needs an address check **bound to the connection**. Reject the common "resolve, validate, then fetch" shape on sight: the hostname resolves again when the socket opens, so an attacker with a short-TTL record answers your check with a public IP and your connection with `169.254.169.254`. Validate in the connect/`lookup` hook, reject if *any* answer is internal, and connect to the address you vetted.
+- Redirects: disable, or re-validate every hop. A `302` defeats a check that only saw the original URL.
 - Restrict schemes to `https:` for external fetches.
-- Outbound to internal services — segment networks so the app can't reach the metadata endpoint even if bypassed.
+- Outbound to internal services — segment the network so the app cannot reach the metadata endpoint even if the code check is bypassed, and require IMDSv2. The network is the control; the code is defence in depth.
 
 ### 8. Path traversal & file handling
 - `fs.readFile(path.join(base, userInput))` → require `path.resolve(base, userInput).startsWith(path.resolve(base) + path.sep)` and reject otherwise.
@@ -122,11 +122,37 @@ export const env = Env.parse(process.env);
 - Timeouts on every outbound call. No infinite retries.
 - Regex with catastrophic backtracking (`(a+)+$`) on user input — ReDoS.
 
+### 13. Race conditions with security impact
+
+The highest-value category that a line-by-line read misses, because every individual line is correct. Ask of any state-changing handler: *what happens if two of these run at the same instant?*
+
+- **Check-then-act on a shared resource.** Read balance → verify sufficient → write new balance. Two parallel requests both pass the check. The fix is a conditional write or a row lock, never a re-read.
+- **Single-use things used twice**: coupons, invites, referral bonuses, password-reset tokens, idempotency keys, one-time MFA codes. If uniqueness is enforced only by a prior `SELECT`, it is not enforced.
+- **Limit bypass by parallelism**: "max 3 API keys per account" checked with a count query, then inserted. Ten parallel requests create ten keys.
+- **State-machine skipping**: an order that can be refunded and shipped concurrently because each handler validated the status independently.
+- **The fix is almost always in the database**, not the application: a `UNIQUE` constraint, `UPDATE … WHERE status = 'pending'` checking the affected row count, `SELECT … FOR UPDATE`, or an atomic `$inc`/`ADD`. Application-level mutexes do not survive a second replica.
+
+```ts
+// ❌ Two parallel requests both see one unused coupon
+const coupon = await db.coupon.findFirst({ where: { code, usedAt: null } });
+if (!coupon) throw new Invalid();
+await db.coupon.update({ where: { id: coupon.id }, data: { usedAt: new Date() } });
+
+// ✅ The write itself is the check; exactly one caller sees count === 1
+const { count } = await db.coupon.updateMany({
+  where: { code, usedAt: null },
+  data: { usedAt: new Date(), redeemedBy: userId },
+});
+if (count === 0) throw new Invalid();
+```
+
+Also check **cache keys on authorized responses**: a key of `user:profile` rather than `user:${id}:profile` serves one caller's data to the next. It is not a race, but it is found by the same question — what else is in flight?
+
 ## Review procedure
 
 1. **Scope** — confirm exactly what's in scope: PR diff, directory, single file. Ask if unclear.
 2. **Read the diff first**, then the callers and callees of anything that looks sensitive.
-3. **Walk the 12 categories above** top-to-bottom. Not every review has findings in every category — say "clean" in one line and move on.
+3. **Walk the 13 categories above** top-to-bottom. Not every review has findings in every category — say "clean" in one line and move on.
 4. **Write findings** in the format above, with Severity ranked by realistic attacker × impact.
 5. **Top 3 first** — tell the author what to fix today.
 6. **Offer a re-review** when fixes land.
@@ -159,3 +185,5 @@ gosec -severity high ./...
 - Recommending a library without naming the specific function and usage pattern.
 - Reviewing the happy path only — attackers don't take the happy path.
 - Padding the review with low-severity noise. A reviewer trusted for signal gets listened to.
+- Approving a check-then-act sequence because each line is correct. Read state-changing handlers as if two copies run at once.
+- Accepting a "resolve then fetch" SSRF guard. It is the most common wrong fix for the most commonly reviewed sink.

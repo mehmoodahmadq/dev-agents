@@ -69,6 +69,8 @@ Flag these only if you have a real reason (e.g., publishable key paired with a r
 5. **Build artifacts**: npm tarballs (`npm pack` then inspect), Python wheels/sdists, Go binaries (`strings`), sourcemaps shipped to CDN.
 6. **Client bundles**: `dist/`, `.next/`, source-mapped minified JS — `NEXT_PUBLIC_*` / `VITE_*` / `REACT_APP_*` are **baked into the client** and visible to everyone.
 7. **Committed test data**: `.har` files, Postman/Insomnia exports, `cassettes/` from VCR/pyvcr.
+8. **Agent and tooling config**: `.mcp.json`, `.cursor/`, `.claude/`, editor workspace settings, and local AI-tool config files increasingly carry provider API keys and are frequently committed by accident. Add them to the scan path and to `.gitignore`.
+9. **Notebooks**: `.ipynb` files store *output cells*, so a key printed once during exploration is committed with the notebook even after the source cell is edited.
 
 ## Detection heuristics (use together, not alone)
 
@@ -93,7 +95,23 @@ GitHub:  Settings → Developer settings → Personal access tokens → Revoke.
 No finding is closed until rotation is confirmed.
 
 ### Step 2 — Remove from current code
-Move the value to a secret manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, 1Password, Doppler, Infisical) or CI-provided env var. Commit the code change referencing the env var.
+Move the value to a secret manager (AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, 1Password, Doppler, Infisical) or a CI-provided env var. Commit the code change referencing the env var.
+
+**Better than moving the secret: delete the category.** A long-lived cloud credential in CI has no reason to exist any more — every major CI system can federate to every major cloud with short-lived OIDC tokens. When the leaked credential is a static cloud key used by a pipeline, the remediation is not "put it in the secret store", it is "there is no key". Say so, because it closes the finding permanently instead of relocating it.
+
+```yaml
+# GitHub Actions → AWS with no stored credentials at all
+permissions:
+  id-token: write          # mint the OIDC token
+  contents: read
+steps:
+  - uses: aws-actions/configure-aws-credentials@v5
+    with:
+      role-to-assume: arn:aws:iam::111122223333:role/ci-deploy
+      aws-region: eu-west-1
+```
+
+The same pattern exists for GCP (Workload Identity Federation), Azure (federated credentials), HashiCorp Vault (JWT auth), and container registries. Scope the trust policy to the specific repository *and* ref — a trust policy matching `repo:org/*` lets any repo in the org assume the role, which is how this control is usually misconfigured.
 
 ### Step 3 — Purge from history (conditionally)
 Only rewrite history if the repo is **private** and you control every clone. For **public** repos, history rewrite does not un-leak — crawlers already have it. Rotate and move on.
@@ -113,7 +131,8 @@ Every finding closes with a control. Pick the smallest one that would have caugh
 - **Pre-commit**: `gitleaks protect --staged` or `trufflehog git file://. --since-commit HEAD` in a `pre-commit` hook.
 - **CI**: `gitleaks detect` / `trufflehog` on every PR; fail the build on findings.
 - **Repo-level**: GitHub secret scanning + push protection enabled for the org.
-- **Policy**: `.gitignore` entries for `.env*`, `*.pem`, `*.p12`, `credentials.json`.
+- **Policy**: `.gitignore` entries for `.env*`, `*.pem`, `*.p12`, `credentials.json`, `.mcp.json`.
+- **Structural**: where the secret was a CI-to-cloud credential, OIDC federation (above) removes the thing being leaked. That is the only control on this list that cannot regress.
 
 ```yaml
 # Example GitHub Actions step

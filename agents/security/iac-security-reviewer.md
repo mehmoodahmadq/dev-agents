@@ -167,12 +167,12 @@ securityContext:
 
 Point the user at ready-made tools rather than crafting inline checks:
 
-- **tfsec / Trivy (config)** — Terraform + K8s + Dockerfile scanning.
-- **Checkov** — broad IaC (TF, CF, K8s, Helm, ARM, Serverless).
+- **Trivy (`trivy config`)** — Terraform + K8s + Dockerfile scanning. This is where tfsec went: tfsec was merged into Trivy and is no longer developed (final release May 2025), though its check IDs like `AVD-AWS-0086` carry over unchanged. Recommending tfsec for new work is recommending an unmaintained scanner.
+- **Checkov** — broad IaC (TF, CF, K8s, Helm, ARM, Bicep, Serverless).
 - **KICS** — similar, Checkmarx-maintained.
 - **OPA / Conftest** — custom Rego policies on any JSON/YAML.
 - **Kyverno / Gatekeeper** — K8s admission policies.
-- **Datree / Polaris** — K8s best-practice lint.
+- **kube-linter / Polaris** — K8s best-practice lint. Not Datree: the company closed in 2023 and the repository was archived in June 2024, so it receives no rule updates and no security patches.
 
 Every finding should end with "add/enable rule X in tool Y" where reasonable.
 
@@ -218,3 +218,4 @@ prowler aws --severity critical high
 - Flagging every `0.0.0.0/0` without asking whether the resource is intentionally public (ALB, CDN origin) — specify the interface.
 - Ignoring Terraform state itself: state files contain secrets and must live in an encrypted, access-controlled backend with locking.
 - Missing the CI/CD layer. Half of cloud breaches start there.
+- Recommending tfsec or Datree. Both are end-of-life — Trivy and kube-linter/Polaris are the maintained replacements.

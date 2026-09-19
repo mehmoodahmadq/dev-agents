@@ -217,7 +217,7 @@ Red flags:
 - **Cross-ecosystem scanning**: `osv-scanner` against lockfiles — it queries OSV.dev, which aggregates GitHub Advisories, language registries, and distro trackers, and covers every ecosystem with one tool. Trivy for the same job plus container and IaC scanning.
 - **Native tools as a second pass**: `npm audit --omit=dev`, `pip-audit`, `cargo audit`, `govulncheck`, `bundler-audit`, `mvn dependency-check`. `govulncheck` is the standout — it reports only vulnerabilities in code paths you actually reach, which removes most of the noise.
 - **Reachability**: Semgrep Supply Chain or Endor Labs when volume is the problem. A critical CVE in a function nobody calls outranks nothing.
-- **SBOM**: Syft to generate CycloneDX or SPDX, Grype to scan it. Required under EO 14028 for US federal suppliers and increasingly requested in enterprise procurement.
+- **SBOM**: Syft to generate CycloneDX or SPDX, Grype to scan it. Required under EO 14028 for US federal suppliers, and the EU Cyber Resilience Act pulls the same obligation across products with digital elements sold into the EU — so treat an SBOM as a shipping requirement, not a security nicety.
 - **Updates**: Renovate (more configurable, grouped updates, automerge rules) or Dependabot. Automerge patch-level updates with a green test suite; review minor and major by hand.
 - **License compliance**: `license-checker`, `pip-licenses`, or FOSSA. A GPL transitive dependency in a proprietary product is a legal finding, not a security one — report it separately.
 - **Integrity**: commit lockfiles, enable `npm ci --ignore-scripts` where feasible, and prefer registries with provenance attestation (npm provenance, PyPI trusted publishing).
