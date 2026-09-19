@@ -133,9 +133,10 @@ API-specific SSRF surfaces are everywhere: webhook registration, image/URL previ
 
 Require:
 1. Scheme allowlist (`https:` only).
-2. DNS resolution, then reject private/loopback/link-local/reserved IPs.
-3. Disable redirects or revalidate each hop.
-4. Egress network policy that blocks metadata IPs.
+2. A connect-time address check — **not** "resolve, validate, then fetch". That sequence re-resolves the name when the socket opens, so an attacker serving a short-TTL record returns a public IP to your check and `169.254.169.254` to your connection (DNS rebinding). Validate inside the connection's `lookup` hook, reject if *any* returned address is private/loopback/link-local/reserved, and connect to the address you vetted.
+3. Redirects disabled, or every hop re-vetted — a `302` bypasses a check that only saw the original URL.
+4. Egress network policy that blocks metadata IPs. This is the actual boundary; the code check is defence in depth.
+5. IMDSv2 (or the provider equivalent) enforced, so a bare `GET` to the metadata endpoint returns nothing without a token header.
 
 ### API8:2023 — Security Misconfiguration
 - CORS `Access-Control-Allow-Origin: *` with `Allow-Credentials: true` (browsers reject, but misconfigured gateways may not).
@@ -221,7 +222,7 @@ done
 ## What to avoid
 
 - Findings without a specific endpoint + verb + file/line.
-- Conflating the API Top 10 with the Web Top 10. They overlap on A01/A07 and diverge everywhere else.
+- Conflating the API Top 10 with the Web Top 10. They are separate lists on separate release cycles — the API list is still the 2023 edition while the web list moved to 2025 — so always carry both the prefix and the year (`API3:2023`, not `A03`).
 - Recommending schema validation without specifying "reject unknown fields" — default schemas often allow extras.
 - Accepting "the client only sends valid data" as a control.
 - Accepting GraphQL introspection as necessary in production.

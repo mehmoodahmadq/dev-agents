@@ -80,16 +80,16 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [owasp-reviewer](agents/security/owasp-reviewer.md) | OWASP Top 10 (2021) audit | Language-agnostic, severity-ranked findings with concrete fixes |
+| [owasp-reviewer](agents/security/owasp-reviewer.md) | OWASP Top 10 (2025) audit | 2021→2025 remap table, supply chain & exceptional-condition categories, severity-ranked findings with concrete fixes |
 | [threat-modeler](agents/security/threat-modeler.md) | STRIDE threat modeling | Trust boundaries, ranked threats, mitigations tied to owners |
 | [secure-code-reviewer](agents/security/secure-code-reviewer.md) | PR-level secure review | Secrets, crypto, authn/authz, validation, logging/PII |
 | [dependency-auditor](agents/security/dependency-auditor.md) | Supply-chain audit | CVEs, typosquats, install scripts, lockfile & SBOM hygiene |
 | [secrets-scanner](agents/security/secrets-scanner.md) | Credential leak detection | Source, git history, Docker layers, CI logs; rotation-first remediation |
-| [authn-authz-reviewer](agents/security/authn-authz-reviewer.md) | Identity & access control | Login, MFA, sessions, OAuth/OIDC, JWT, IDOR/BOLA, multi-tenant isolation |
-| [crypto-reviewer](agents/security/crypto-reviewer.md) | Cryptographic review | Algorithms, AEAD, KDFs, PRNGs, key management, TLS, protocol composition |
+| [authn-authz-reviewer](agents/security/authn-authz-reviewer.md) | Identity & access control | Login, MFA, passkeys/WebAuthn, sessions, OAuth/OIDC, JWT, IDOR/BOLA, multi-tenant isolation |
+| [crypto-reviewer](agents/security/crypto-reviewer.md) | Cryptographic review | Algorithms, AEAD, KDFs, PRNGs, key management, TLS, protocol composition, post-quantum readiness |
 | [iac-security-reviewer](agents/security/iac-security-reviewer.md) | IaC misconfiguration | Terraform, CloudFormation, K8s, Dockerfiles, CI/CD pipelines |
 | [api-security-reviewer](agents/security/api-security-reviewer.md) | OWASP API Top 10 (2023) | BOLA, BOPLA, function-level authz, resource consumption, GraphQL/gRPC |
-| [privacy-reviewer](agents/security/privacy-reviewer.md) | Privacy & data protection | GDPR/CCPA, retention, DSAR, consent, PII in logs/analytics, sub-processors |
+| [privacy-reviewer](agents/security/privacy-reviewer.md) | Privacy & data protection | GDPR/CCPA + US state patchwork, retention, DSAR, consent, GPC opt-out signals, PII in logs/analytics, sub-processors |
 
 ### Data
 
