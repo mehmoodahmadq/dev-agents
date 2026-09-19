@@ -113,11 +113,11 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [express](agents/backend/express.md) | Node.js + Express 5 | Async error flow, middleware order, Zod validation, Drizzle/Prisma, helmet, structured logs |
-| [fastapi](agents/backend/fastapi.md) | FastAPI + Pydantic v2 | Async SQLAlchemy 2.0, Depends DI, lifespan, OpenAPI-driven, async hygiene |
-| [django](agents/backend/django.md) | Django 5 / DRF / Ninja | Settings split, custom user model, services + selectors, migrations, `manage.py check --deploy` |
-| [nestjs](agents/backend/nestjs.md) | NestJS 10+ / Fastify | Modules + DI, guards/interceptors/pipes/filters, Prisma/TypeORM, BullMQ, microservices |
-| [rest-api](agents/backend/rest-api.md) | Language-agnostic API design | Resources, status codes, RFC 7807 errors, cursor pagination, idempotency keys, ETags, versioning, OpenAPI 3.1 |
+| [express](agents/backend/express.md) | Node.js 22 + Express 5.1 | Async error flow, middleware order, Zod 4 validation, AsyncLocalStorage context, undici timeouts + SSRF guard, graceful drain |
+| [fastapi](agents/backend/fastapi.md) | FastAPI 0.115 + Pydantic v2 | Async SQLAlchemy 2.0, `Annotated` DI aliases, lifespan, cancellation + bounded fan-out, uvicorn workers, OpenAPI-driven |
+| [django](agents/backend/django.md) | Django 5.2 LTS / DRF / Ninja | Settings split, custom user model, services + selectors, async ORM (`aget`/`async for`), psycopg pooling, safe migrations, `check --deploy` |
+| [nestjs](agents/backend/nestjs.md) | NestJS 11 / Fastify 5 | Modules + DI, guards/interceptors/pipes/filters, Prisma/TypeORM, cache-manager v3, BullMQ, microservices |
+| [rest-api](agents/backend/rest-api.md) | Language-agnostic API design | Resources, status codes, RFC 9457 problem details, cursor pagination, idempotency keys, ETags, RFC 9745 deprecation, OpenAPI 3.1 |
 
 ### DevOps
 
