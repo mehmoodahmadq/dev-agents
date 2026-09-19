@@ -155,9 +155,9 @@ client.messages.create(
 
 | Agent | Focus | Highlights |
 |-------|-------|------------|
-| [react-native](agents/mobile/react-native.md) | React Native 0.76+ / Expo | New Architecture, Expo Router, FlashList & Reanimated 3, offline-first storage, EAS Build/Update, SecureStore, deep-link validation |
-| [flutter](agents/mobile/flutter.md) | Flutter stable / Dart 3 | Riverpod codegen, go_router auth redirects, sealed classes & patterns, isolates for parsing, rebuild & paint performance, Pigeon, golden tests, dart-define secrets |
-| [ios-native](agents/mobile/ios-native.md) | SwiftUI / iOS 18+ | Observation, value-based NavigationStack, SwiftData & Keychain, main-actor discipline, Instruments, Swift Testing, TestFlight phased release, App Attest & privacy manifests |
+| [react-native](agents/mobile/react-native.md) | React Native 0.85+ / Expo SDK 57 | New Architecture (JSI, Fabric, interop layer), Expo Router, FlashList & Reanimated 4, offline mutation queues, EAS Build/Update, SecureStore, deep-link validation |
+| [flutter](agents/mobile/flutter.md) | Flutter stable / Dart 3 | Riverpod codegen, go_router auth redirects, sealed classes & patterns, isolates for parsing, Impeller-era rebuild & paint performance, Pigeon, golden tests, dart-define secrets |
+| [ios-native](agents/mobile/ios-native.md) | SwiftUI / iOS 26+ | Observation, value-based NavigationStack, SwiftData & Keychain, main-actor discipline, Instruments, Swift Testing, TestFlight phased release, App Attest & privacy manifests |
 | [android-native](agents/mobile/android-native.md) | Kotlin / Jetpack Compose | ViewModel + StateFlow UDF, type-safe navigation, Room & WorkManager, Compose stability, Baseline Profiles & R8, exported components, PendingIntent, Keystore + Tink |
 
 ---

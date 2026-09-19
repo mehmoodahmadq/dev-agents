@@ -174,6 +174,8 @@ Future<List<OrderDto>> fetchOrders() async {
 
 Profile in **profile mode on a real, low-end device** with Flutter DevTools. Debug mode runs a JIT with assertions and is several times slower.
 
+**Shader compilation jank is solved, and the old workarounds are now noise.** Impeller is the default renderer on iOS and Android; it compiles its shaders ahead of time, which removes the first-run stutter that used to hit every new animation. Advice to warm up shaders with SkSL capture (`--bundle-sksl-path`, `--purge-persistent-cache`) targets the retired Skia backend and does nothing here — if you inherit that flag in a build script, delete it. A first-run stutter under Impeller is an ordinary jank bug: profile it like any other frame.
+
 1. **Rebuilds** — enable "Track widget rebuilds" in DevTools. Split big widgets, add `const` constructors, and use `ref.watch(provider.select((s) => s.field))` so a widget rebuilds only for the field it shows.
 2. **Lists** — `ListView.builder` / `SliverList` for anything beyond a screenful; set `itemExtent` or `prototypeItem` when rows are fixed height. A `Column` inside a `SingleChildScrollView` builds every child up front.
 3. **Expensive painting** — avoid `Opacity` and `ClipRRect` on animating subtrees (they force offscreen layers); use `FadeTransition`, pre-rounded images, or `RepaintBoundary` around independently animating regions.
