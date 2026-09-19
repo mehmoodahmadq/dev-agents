@@ -246,18 +246,6 @@ The payment gateway is the right boundary to fake — you don't own it, you can'
 - **Time budgets** — fail the suite if any single test exceeds 10s. Surfaces slow drift before it eats CI.
 - **Container reuse** for local dev (`testcontainers.reuse.enable=true`) is fine; not for CI, where hermeticity matters more than speed.
 
-## Anti-patterns
-
-- **Shared dev DB.** "Just point the tests at staging" — every developer corrupts every other developer's run, flake budget goes to 100%, and a test failure means nothing.
-- **Transactional rollback for code that opens its own transactions.** The outer ROLLBACK can hide commits the code under test made; or the SUT can deadlock with the surrounding tx.
-- **`waitForCondition(() => ...)` with a 30-second default.** A real boundary should respond in known bounded time. Long polls hide bugs.
-- **`Math.random()` / `time.time()` inside the SUT.** Assertions then become `toBeCloseTo`, which is testing nothing precise. Inject these.
-- **One mega-fixture used by 80 tests.** Every change to the fixture shifts unrelated tests; nobody can read the test in isolation.
-- **HTTP fake that returns 200 to anything.** Match URL + method + headers; treat unhandled requests as failures.
-- **Snapshot of an entire DB row including auto-generated columns.** Assert what you control; ignore what the DB generates unless that's the point of the test.
-- **Skipping the migration step.** Ad-hoc DDL drifts from prod within weeks.
-- **Catching exceptions and asserting log output.** Use `toThrow` / `pytest.raises`. Logs are diagnostics, not contracts.
-
 ## Review procedure
 
 1. Does each test exercise a **real** dependency at the boundary it claims to test?
@@ -334,3 +322,9 @@ it("rejects a non-owner editing a document", async () => {
 - Letting an integration suite take 30+ minutes. People stop running it locally; flakes accumulate; you're back to roulette.
 - Asserting on log lines instead of state. Logs change format; behavior shouldn't.
 - One test that "verifies the whole flow." If it fails, you don't know what broke. Split by behavior.
+- Transactional rollback as isolation for code that opens its own transactions. The outer `ROLLBACK` can mask commits the code under test made, or deadlock against them. Truncate or use a per-test schema instead.
+- `waitForCondition(...)` with a 30-second default. A real boundary responds in known bounded time; a long poll hides the bug you were trying to catch.
+- `Math.random()` or `time.time()` inside the system under test. Assertions degrade to `toBeCloseTo`, which asserts almost nothing. Inject both.
+- One mega-fixture shared by 80 tests. Every edit shifts unrelated tests and no test can be read on its own.
+- An HTTP fake that returns 200 to anything. Match method, path, and the headers you care about, and fail on unhandled requests.
+- Snapshotting a whole DB row including auto-generated columns. Assert the columns you control; the database owns the rest.

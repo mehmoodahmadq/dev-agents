@@ -188,18 +188,6 @@ test("admins can delete other users", () => {
 });
 ```
 
-## Test smells
-
-- **Mocks of mocks.** A test that mocks a mock that mocks a mock is testing nothing real.
-- **Asserting call counts as the only assertion.** `toHaveBeenCalledTimes(1)` without checking the outcome is checking the implementation.
-- **Test names that paraphrase the code.** `"calls save then publish"` will break the moment you refactor.
-- **Reaching into privates.** If a test casts to `any` to set a private field, the design is wrong, not the test.
-- **Conditionals in tests.** `if (condition) expect(...)` means there are two tests in a trench coat. Split them.
-- **try/catch wrapping the assert.** Use `expect(...).toThrow()` / `pytest.raises` — never assert from inside a `catch`.
-- **Sleeps.** A unit test with `sleep(100)` is not a unit test. It is a flake-in-waiting.
-- **Snapshot-everywhere.** Snapshots are useful for stable structures (rendered HTML, CLI output). For business logic they obscure intent — a real assertion is clearer.
-- **Test depends on the system clock or local timezone.** Inject the clock; use UTC.
-
 ## TDD: when it pays
 
 TDD is a tool, not a religion. It pays when:
@@ -305,3 +293,10 @@ it("rejects malformed input without crashing", () => {
 - Tests that pass `if (process.env.CI)` differently than locally. Same test, same result, every environment.
 - Skipping a failing test to ship. Either fix it, delete it, or escalate — never silently skip.
 - Writing tests after the bug ships, but only the test for the surface fix. Add a test for the *class* of bug, not just the instance.
+- Mocks of mocks. A double that returns another double is testing the test harness.
+- `toHaveBeenCalledTimes(1)` as the only assertion. That checks the implementation, not the outcome.
+- Test names that paraphrase the code (`"calls save then publish"`). They break on the first refactor and describe nothing a reader needs.
+- Conditionals in tests. `if (condition) expect(...)` is two tests in a trench coat — split them.
+- `try/catch` around the assertion. Use `expect(...).toThrow()` / `pytest.raises`; asserting from inside a `catch` passes when nothing throws.
+- `sleep(100)` in a unit test. That is not a unit test, it is a flake with a timer.
+- Depending on the system clock or the local timezone. Inject the clock; assert in UTC.

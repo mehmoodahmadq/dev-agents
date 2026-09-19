@@ -65,9 +65,10 @@ export default defineConfig({
   },
 
   projects: [
+    // Full suite on one engine; the other two run only @cross-browser tagged specs.
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "webkit",   use: { ...devices["Desktop Safari"] } },
-    { name: "firefox",  use: { ...devices["Desktop Firefox"] } },
+    { name: "webkit", use: { ...devices["Desktop Safari"] }, grep: /@cross-browser/ },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] }, grep: /@cross-browser/ },
   ],
 
   webServer: process.env.CI
@@ -82,10 +83,10 @@ export default defineConfig({
 ```
 
 Notes:
-- `forbidOnly` blocks `.only` from landing in CI.
-- `retries: 2` in CI is a deflake net, not a bug-hider — track the retry rate (see "Flake budget" below).
+- `forbidOnly` blocks `.only` from landing in CI; `retries: 2` is a deflake net, not a bug-hider — track the retry rate (see "Flake budget").
 - `trace: "on-first-retry"` keeps storage cost low while still capturing every flake.
-- Local dev gets the auto-started server; CI assumes the server is already started by the pipeline (faster, more debuggable).
+- Local dev gets the auto-started server; CI assumes the pipeline already started it (faster, more debuggable).
+- Running every spec on three engines triples CI time for a thin slice of signal. Tag the handful of specs where rendering genuinely differs and grep for them.
 
 ## Locators: the only API you need
 
@@ -252,24 +253,9 @@ expect(request.postDataJSON()).toMatchObject({ event: "subscribe_clicked" });
 
 ## Page Object Model: optional, often unnecessary
 
-Modern Playwright with role-based locators makes most POMs ceremony. Reach for them only when:
-- A flow is repeated across **5+ tests** with non-trivial steps.
-- A complex component (date picker, rich-text editor) needs a domain-specific helper.
+Modern Playwright with role-based locators makes most POMs ceremony. Reach for one only when a non-trivial flow repeats across 5+ tests, or a complex widget (date picker, rich-text editor) needs a domain-specific helper.
 
-When you do, write a class with **methods that perform actions and return assertions** — not a bag of selectors.
-
-```ts
-class CheckoutPage {
-  constructor(private page: Page) {}
-
-  goto = () => this.page.goto("/checkout");
-  fillShipping = (addr: Address) => this.page.getByLabel("Address").fill(addr.line1);
-  pay = () => this.page.getByRole("button", { name: "Pay" }).click();
-  expectSuccess = () => expect(this.page).toHaveURL("/checkout/success");
-}
-```
-
-If a "page object" is just a list of selectors, delete it.
+When you do, write **methods that perform actions and assert outcomes**, not a bag of selectors — `checkout.pay()` and `checkout.expectSuccess()`, never `checkout.payButton`. A plain fixture usually beats a class. If a "page object" is only a list of selectors, delete it.
 
 ## Parallelization, sharding, isolation
 
@@ -331,15 +317,13 @@ Fixtures own setup *and* teardown. Tests stay focused on the behavior.
 
 ## Visual regression
 
-Use it sparingly — for **stable, branded surfaces** (logo, header, marketing page) and **icon/SVG snapshots**.
+Use it sparingly — for **stable, branded surfaces** (logo, header, marketing page) and icon/SVG snapshots.
 
 ```ts
-await expect(page).toHaveScreenshot("home.png", {
-  maxDiffPixelRatio: 0.01,
-});
+await expect(page).toHaveScreenshot("home.png", { maxDiffPixelRatio: 0.01 });
 ```
 
-Pin to one OS/browser project for screenshot baselines (e.g., chromium-linux). Don't snapshot full app pages with dynamic data — your CI will be a wall of red diffs.
+Baselines are OS- and browser-specific: pin them to one project (chromium-linux) and generate them in a container matching CI, or every developer's local run rewrites them. Don't snapshot full pages with dynamic data — CI becomes a wall of red diffs nobody reads.
 
 ## Accessibility checks
 
@@ -350,13 +334,12 @@ import AxeBuilder from "@axe-core/playwright";
 
 test("dashboard has no critical a11y violations", async ({ page }) => {
   await page.goto("/dashboard");
-  const result = await new AxeBuilder({ page }).analyze();
-  const critical = result.violations.filter((v) => v.impact === "critical");
-  expect(critical).toEqual([]);
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  expect(violations.filter((v) => v.impact === "critical")).toEqual([]);
 });
 ```
 
-For deeper a11y guidance defer to `accessibility`.
+Axe catches roughly a third of real accessibility defects — it is a floor, not a pass. For depth defer to `accessibility`.
 
 ## Flake budget
 
@@ -420,12 +403,10 @@ A healthy E2E suite is **20–80 tests**, not 800. Anything more, and the suite 
 ## Tooling
 
 - **Runner**: Playwright Test — not Playwright-the-library under another runner, which loses fixtures, sharding, traces, and the HTML report.
-- **Browsers**: Chromium for the main suite; WebKit and Firefox on critical paths only. Three engines everywhere triples CI time for a thin slice of signal.
+- **Browsers**: Chromium for the main suite, WebKit and Firefox for tagged cross-browser specs (see Configuration).
 - **Assertions**: `expect` from `@playwright/test` exclusively — a bare Vitest or Chai `expect` doesn't auto-retry and will flake.
-- **Accessibility**: `@axe-core/playwright` on key screens, via a shared fixture. **Visual**: `toHaveScreenshot()`, or Chromatic/Percy for cross-browser review.
-- **Reporting**: `html` locally; `blob` per shard in CI, merged with `merge-reports`.
-- **Codegen**: `npx playwright codegen` to discover locators, then rewrite by hand — generated scripts are a starting point, never the committed test.
-- **Debugging**: `--ui`, `--debug`, and the trace viewer. These three make E2E maintenance tractable.
+- **Accessibility**: `@axe-core/playwright` via a shared fixture. **Visual**: `toHaveScreenshot()`, or Chromatic/Percy for cross-browser review. **Reporting**: `html` locally; `blob` per shard in CI, merged with `merge-reports`.
+- **Codegen**: `npx playwright codegen` to discover locators, then rewrite by hand — generated scripts are a starting point, never the committed test. **Debugging**: `--ui`, `--debug`, and the trace viewer make E2E maintenance tractable.
 
 ## Security
 

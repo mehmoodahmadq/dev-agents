@@ -57,16 +57,17 @@ export default defineConfig({
 ```ts
 // test/setup.ts
 import "@testing-library/jest-dom/vitest";
-import { afterEach } from "vitest";
-import { cleanup } from "@testing-library/react";
+import { afterAll, afterEach, beforeAll } from "vitest";
 import { server } from "./msw-server";
-
-afterEach(() => cleanup());
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 ```
+
+Import every hook you use, even with `globals: true` — the config and the setup file drift independently, and a file that relies on globals breaks silently the day someone turns them off.
+
+Testing Library auto-runs `cleanup()` after each test when the framework exposes a global `afterEach`, which Vitest does. Calling it yourself is harmless but redundant; what is *not* optional is that cleanup happens at all — without it, every test renders into a DOM still holding the last test's tree, and your `getByRole` starts matching two elements.
 
 `onUnhandledRequest: "error"` is the discipline: a test that makes an unmocked request fails immediately with the URL it tried to hit.
 
@@ -267,15 +268,6 @@ test("rejects an empty email", async () => {
 
 A `setup()` helper per file keeps tests focused on the behavior, not the wiring.
 
-## Common pitfalls
-
-- **`act()` warnings.** They mean an async update happened outside React's awareness. `userEvent` and `findBy*` already wrap in `act` — if you're seeing the warning, you're probably mutating state outside an event handler. Fix the source, don't suppress.
-- **Mocking child components** (`vi.mock("./Header", ...)`). Fine for one-offs (heavy components, third-party widgets); a smell when half the tree is mocked. The point of component testing is to exercise the composition.
-- **Asserting on prop values passed to children.** That's the test for the parent's API, not the child's behavior. Test what the user sees instead.
-- **Reading `container.innerHTML`.** A regex against innerHTML is brittle; use a query.
-- **Hand-rolled wait loops.** Use `findBy*` / `waitFor`.
-- **`toHaveBeenCalled()` as the only assertion.** What did the click *do*? Assert that.
-
 ## Performance
 
 - **Single test < 50ms** for simple components, < 200ms for complex ones.
@@ -356,3 +348,7 @@ it("does not render admin actions for a viewer", () => {
 - Hand-rolled providers in every test. Make a `renderWith*` helper.
 - Letting jsdom warnings ("Not implemented: HTMLCanvasElement.getContext") accumulate. Either polyfill or move the test to Vitest browser mode.
 - Slipping E2E-shaped tests into the component layer ("test the whole signup flow"). They become slow and flaky here; move them to `e2e-playwright`.
+- Suppressing `act()` warnings. They mean an async update happened outside React's awareness — `userEvent` and `findBy*` already wrap in `act`, so the warning is pointing at state mutated outside an event handler. Fix the source.
+- Mocking half the component tree (`vi.mock("./Header", ...)`). Fine for a heavy or third-party widget; once several children are mocked you are no longer testing the composition, which was the point.
+- Hand-rolled wait loops and polling. `findBy*` / `waitFor` exist and retry correctly.
+- `toHaveBeenCalled()` as the only assertion. That the handler fired is rarely the interesting part — assert what it *did*.

@@ -236,17 +236,6 @@ A mutation run is N test runs. To stay sane:
 
 If a mutation run still takes too long, the test suite is too slow — fix that first.
 
-## Anti-patterns
-
-- **Treating score as the metric** without inspecting survivors. The score is an indicator; the **list of survivors** is the work.
-- **100% mutation score as a goal.** Equivalent mutants alone make this nonsense. 85+ is excellent.
-- **Mutating generated code, mocks, or DTOs.** Floods of irrelevant survivors. Exclude.
-- **Killing mutants by adding `expect(x).toBeDefined()` everywhere.** That's gaming the score. Strengthen real assertions.
-- **Running mutation testing instead of a real test suite review.** It's a complement to design discipline, not a substitute.
-- **Ignoring equivalent mutants.** They confuse readers and silently inflate the survival rate. Annotate them or fix the operators.
-- **Setting the threshold higher than current score, then never running it.** Now it's just a number that fails CI.
-- **Running on flaky suites.** Each flake produces a false-killed mutant, distorting the score.
-
 ## Review procedure
 
 1. Has line/branch coverage been raised to a reasonable floor before mutation testing was added?
@@ -309,3 +298,6 @@ it("denies a non-owner, non-admin", () => {
 - Annotating "equivalent" without justification. Future-you will read it as a cop-out. Write *why*.
 - Treating mutation testing as a one-time cleanup. The score regresses with every weak test added; ratchet it in CI.
 - Running it without `unit-testing` discipline already in place. Garbage in, garbage out — louder.
+- Killing mutants with `expect(x).toBeDefined()` sprinkled everywhere. That raises the score without strengthening a single assertion, which is worse than a low score because it now lies.
+- Reaching for mutation testing *instead of* reviewing the suite. It complements design discipline; it does not replace reading the tests.
+- Setting the CI threshold above the current score and then never running it. That is not a ratchet, it is a permanently red check people learn to ignore.
